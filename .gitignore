@@ -1,0 +1,20 @@
+# PDF files - regulatory documents not for distribution
+*.pdf
+
+# Kiro configuration and local settings
+.kiro/
+
+# macOS
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
