@@ -11,6 +11,7 @@
 *.swp
 *.swo
 *~
+.vscode/
 
 # Logs
 *.log
