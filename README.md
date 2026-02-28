@@ -86,7 +86,7 @@ This guide addresses all these challenges with practical, tested implementations
 |----------|-------------|--------|
 | **[README-Kiro-Banking-Best-Practices.md](README-Kiro-Banking-Best-Practices.md)** | Detailed overview and quick start guide | ✅ Complete |
 | **[Kiro-Agentic-SDLC-Banking-Best-Practices.md](Kiro-Agentic-SDLC-Banking-Best-Practices.md)** | Comprehensive implementation guide (Sections 1-4) | ✅ Complete |
-| **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-10) | 🚧 In Progress |
+| **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-14) incl. PDPA, Outsourcing, AI/ML, ABS | ✅ Complete |
 
 ### Technical Reference
 
@@ -235,28 +235,45 @@ Week 5-6: Monitoring & Compliance
 
 ## Compliance Framework
 
+### Regulatory Framework Coverage
+
+| Regulation | Scope | Document Reference |
+|------------|-------|-------------------|
+| **MAS TRM Guidelines** (Jan 2021) | Technology risk management (15 sections) | Part 1 & Part 2 |
+| **Singapore PDPA** (2012, amended 2020) | Personal data protection | Part 2, Section 11 |
+| **MAS Outsourcing Guidelines** (2018) | Third-party service risk management | Part 2, Section 12 |
+| **MAS FEAT Principles** | AI/ML fairness, ethics, accountability, transparency | Part 2, Section 13 |
+| **ABS Cloud Computing Guide** | Industry cloud security standards | Part 2, Section 14 |
+| **ABS Penetration Testing Guidelines** | Security assessment standards | Part 2, Section 14.2 |
+
 ### MAS TRM Guidelines Mapping
 
 | MAS Section | Control Area | Implementation | Document Reference |
 |-------------|--------------|----------------|-------------------|
 | **3.1** | Governance & Oversight | IAM IDC + Enterprise IdP | Section 2 |
+| **5.1-5.2** | IT Project Mgmt & Security-by-Design | Supervised mode + Skills | Section 6 |
 | **9.1** | Access Control | MFA + Session Management | Section 2.1.3 |
 | **9.3** | Remote Access Security | VPC + PrivateLink | Section 3 |
 | **10** | Cryptography | TLS 1.2+ + KMS | Section 7 |
-| **11.1** | Data Security | DLP + Encryption at Rest | Section 4.1.3 |
+| **11.1** | Data Security | DLP + Encryption + PDPA | Section 4.1.3, Section 11 |
 | **11.2** | Network Security | VPC Endpoints + Security Groups | Section 3.2 |
+| **12.1-12.3** | Cyber Security Operations | CloudWatch + monitoring | Section 8 |
+| **13.1-13.4** | Security Assessment | Annual VA/PT of Kiro environments | Section 14.2 |
 | **15** | IT Audit | CloudTrail + Monitoring | Section 8 |
 
 ### Key Compliance Controls
 
-✅ **Zero Trust Architecture** - No internet-facing endpoints, all traffic through VPC PrivateLink  
-✅ **MFA Enforcement** - Required for all user access via Enterprise IdP  
-✅ **Least Privilege** - IAM policies grant minimum required permissions  
-✅ **Encryption** - Data encrypted at rest (KMS) and in transit (TLS 1.2+)  
-✅ **Audit Trails** - CloudTrail logging with 90-day minimum retention  
-✅ **Data Residency** - All data processing within Singapore region  
-✅ **DLP Controls** - Prevent code exfiltration and credential exposure  
-✅ **MCP Governance** - Centrally managed whitelist, no developer modifications  
+✅ **Zero Trust Architecture** - No internet-facing endpoints, all traffic through VPC PrivateLink
+✅ **MFA Enforcement** - Required for all user access via Enterprise IdP
+✅ **Least Privilege** - IAM policies grant minimum required permissions
+✅ **Encryption** - Data encrypted at rest (KMS) and in transit (TLS 1.2+)
+✅ **Audit Trails** - CloudTrail logging with 90-day minimum retention
+✅ **Data Residency** - All data processing within Singapore region (ap-southeast-1)
+✅ **DLP Controls** - Prevent code exfiltration and credential exposure
+✅ **MCP Governance** - Centrally managed whitelist, no developer modifications
+✅ **PDPA Compliance** - Data classification, DLP rules for personal data, breach notification
+✅ **AI Governance** - FEAT principles applied, human accountability for AI-generated code
+✅ **Outsourcing Risk** - Due diligence, exit strategy, concentration risk management  
 
 ---
 
@@ -300,18 +317,47 @@ This documentation is provided for informational and educational purposes only. 
 
 ---
 
+## Approved MCP Servers for Banking
+
+### Tier 1: Pre-Approved (No Additional Review)
+- **AWS Documentation** - Official AWS docs access
+- **Git** - Repository operations (read-only recommended)
+- **Filesystem** - Controlled directory access
+
+### Tier 2: Conditional Approval (Security Review Required)
+- **GitHub** - With token scope restrictions
+- **Docker** - For containerized builds
+- **Kubernetes** - For deployment automation
+
+### Tier 3: Prohibited
+- **Web Search** - External data leakage risk
+- **Browser** - Uncontrolled web access
+- **Custom/Unverified** - Unknown security posture
+
+---
+
 ## Additional Resources
 
 ### AWS Documentation
 - [Kiro Privacy and Security](https://kiro.dev/docs/privacy-and-security/)
 - [Kiro MCP Security](https://kiro.dev/docs/mcp/security/)
+- [Kiro MCP Configuration](https://kiro.dev/docs/mcp/configuration/)
 - [AWS IAM Identity Center](https://docs.aws.amazon.com/singlesignon/)
 - [AWS PrivateLink](https://docs.aws.amazon.com/vpc/latest/privatelink/)
 - [Amazon WorkSpaces](https://docs.aws.amazon.com/workspaces/)
 
 ### MAS Guidelines
-- [Technology Risk Management Guidelines](https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines)
+- [Technology Risk Management Guidelines (Jan 2021)](https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines)
 - [MAS Framework for Impact and Risk Assessment](https://www.mas.gov.sg/)
+- [MAS Guidelines on Outsourcing](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-outsourcing)
+- [MAS FEAT Principles (AI/ML)](https://www.mas.gov.sg/publications/monographs-or-information-paper/2018/feat)
+
+### Singapore Data Protection
+- [Personal Data Protection Act (PDPA)](https://www.pdpc.gov.sg/overview-of-pdpa/the-legislation/personal-data-protection-act)
+
+### Industry Standards
+- [ABS Cloud Computing Implementation Guide](https://abs.org.sg/)
+- [ABS Penetration Testing Guidelines](https://abs.org.sg/)
 
 ### AWS Compliance
 - [AWS Financial Services Security](https://aws.amazon.com/financial-services/security-compliance/)
@@ -329,6 +375,16 @@ For questions, issues, or feedback:
 
 ---
 
-**Version:** 1.0  
-**Last Updated:** February 26, 2026  
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-02-25 | Initial release (Sections 1-4) |
+| 1.1 | 2026-02-26 | Complete sections 5-10, add README |
+| 1.2 | 2026-02-28 | Regulatory enhancement: PDPA, Outsourcing, AI/ML, ABS guidelines |
+
+---
+
+**Version:** 1.2
+**Last Updated:** February 28, 2026
 **Maintained By:** Security Architecture Team

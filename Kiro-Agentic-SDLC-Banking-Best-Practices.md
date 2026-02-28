@@ -688,37 +688,8 @@ $complianceResults | Export-Csv -Path "\\fileserver\compliance\kiro-compliance-$
 
 ---
 
-## License
+## License & Disclaimer
 
-This documentation is licensed under the MIT License.
+This documentation is licensed under the [MIT License](LICENSE).
 
-Copyright (c) 2026
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this documentation and associated files (the "Documentation"), to deal in the Documentation without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Documentation, and to permit persons to whom the Documentation is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Documentation.
-
-THE DOCUMENTATION IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE DOCUMENTATION OR THE USE OR OTHER DEALINGS IN THE DOCUMENTATION.
-
-## Disclaimer
-
-This documentation is provided for informational and educational purposes only. It does not constitute:
-- Legal advice or regulatory guidance
-- Professional security consulting services
-- Compliance certification or validation
-- Endorsement of any specific implementation approach
-
-**No Liability:** The authors and contributors accept no responsibility or liability for:
-- Any security breaches, data losses, or compliance violations
-- Implementation decisions made based on this documentation
-- Accuracy, completeness, or suitability of the information provided
-- Any damages or losses arising from the use of this documentation
-
-**User Responsibility:** Organizations using this documentation must:
-- Conduct their own independent security assessments and risk analysis
-- Consult with qualified legal, compliance, and security professionals
-- Validate all implementations against their specific regulatory requirements
-- Maintain full responsibility for their security posture and compliance status
-- Adapt all guidance to their specific organizational context and risk profile
-
-**Regulatory Compliance:** This documentation references MAS guidelines but does not guarantee compliance. Organizations are solely responsible for ensuring their implementations meet all applicable regulatory requirements.
+> **Disclaimer:** This documentation is provided for informational and educational purposes only. It does not constitute legal advice, regulatory guidance, or professional security consulting. Organizations must conduct independent security assessments, consult qualified professionals, and validate all implementations against their specific regulatory requirements. See [README.md](README.md#disclaimer) for full disclaimer.

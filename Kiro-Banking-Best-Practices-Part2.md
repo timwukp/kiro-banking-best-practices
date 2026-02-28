@@ -1,5 +1,5 @@
 # AWS Kiro Banking Best Practices - Part 2
-## Sections 5-10: MCP Governance, SDLC, Data Protection & Operations
+## Sections 5-14: MCP Governance, SDLC, Data Protection, Operations & Regulatory Compliance
 
 ---
 
@@ -566,47 +566,335 @@ aws workspaces reboot-workspaces --reboot-workspace-requests WorkspaceId=ws-xxxx
 
 ---
 
+## 11. Personal Data Protection Act (PDPA) Compliance
+
+### 11.1 PDPA Overview for Kiro Usage
+
+**Applicability:** The Personal Data Protection Act 2012 (PDPA) governs the collection, use, disclosure, and care of personal data in Singapore. When developers use Kiro to write, review, or debug code that handles personal data, PDPA obligations apply.
+
+**Key PDPA Obligations Relevant to Kiro:**
+
+| PDPA Obligation | Kiro Context | Implementation |
+|-----------------|--------------|----------------|
+| **Consent** | Code processing personal data must have valid consent basis | Kiro prompts should reference consent requirements |
+| **Purpose Limitation** | Personal data used only for stated purposes | DLP policies block unauthorized data access |
+| **Notification** | Individuals informed of data collection purposes | Audit logs track what data Kiro accesses |
+| **Access & Correction** | Individuals can request access to their data | Data handling code must support DSAR workflows |
+| **Accuracy** | Reasonable effort to ensure data is accurate | Validation logic in Kiro-generated code |
+| **Protection** | Reasonable security to protect personal data | Encryption, DLP, VPC isolation |
+| **Retention Limitation** | Data not kept longer than necessary | Kiro prompt logs subject to retention policy |
+| **Transfer Limitation** | Cross-border transfer restrictions | Data residency in ap-southeast-1 (Singapore) |
+| **Data Breach Notification** | Notify PDPC within 3 calendar days of assessment | Incident response plan must include PDPC notification |
+
+### 11.2 PDPA Controls for Kiro Environments
+
+**Data Classification for Kiro Context:**
+
+```json
+{
+  "dataClassification": {
+    "prohibited_in_prompts": [
+      "NRIC numbers",
+      "Credit card numbers (full)",
+      "Bank account numbers (full)",
+      "Medical records",
+      "Passwords or authentication credentials"
+    ],
+    "restricted_in_prompts": [
+      "Customer names (use pseudonyms)",
+      "Email addresses (use examples)",
+      "Phone numbers (use masked format)",
+      "Transaction amounts (use sample data)"
+    ],
+    "permitted_in_prompts": [
+      "Code patterns and logic",
+      "Architecture descriptions",
+      "Error messages (sanitized)",
+      "Configuration templates"
+    ]
+  }
+}
+```
+
+**DLP Policy Enhancement for PDPA:**
+
+```json
+{
+  "pdpa_dlp_rules": [
+    {
+      "name": "Block NRIC in Kiro Prompts",
+      "pattern": "[STFG]\\d{7}[A-Z]",
+      "action": "block_and_alert",
+      "notification": "PDPA violation: NRIC detected in AI prompt"
+    },
+    {
+      "name": "Block Credit Card in Kiro Prompts",
+      "pattern": "\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\\b",
+      "action": "block_and_alert",
+      "notification": "PDPA violation: Credit card number detected"
+    },
+    {
+      "name": "Warn on Email in Prompts",
+      "pattern": "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+      "action": "warn_and_log",
+      "notification": "PDPA advisory: Email address in AI prompt"
+    }
+  ]
+}
+```
+
+### 11.3 PDPA Compliance Checklist for Kiro
+
+- [ ] Data classification policy defined for AI-assisted development
+- [ ] DLP rules enforce PDPA data categories in Kiro prompts
+- [ ] Developer training covers PDPA obligations when using AI tools
+- [ ] Prompt logging enabled with PDPA-compliant retention (max 5 years)
+- [ ] Data residency confirmed in Singapore region (ap-southeast-1)
+- [ ] Cross-region inference disabled for PDPA-regulated workloads
+- [ ] Data breach notification process includes PDPC (3-day assessment window)
+- [ ] Privacy impact assessment completed for Kiro deployment
+- [ ] Data intermediary obligations assessed (Kiro/AWS as data intermediary)
+
+### 11.4 PDPA Breach Notification
+
+**Timeline (per PDPA Amendment 2020):**
+
+```
+Data breach discovered
+  └─ Assess within 30 calendar days if breach is notifiable
+     └─ If notifiable (significant harm or ≥500 individuals):
+        └─ Notify PDPC within 3 calendar days of assessment
+        └─ Notify affected individuals as soon as practicable
+```
+
+**Integration with Incident Response (Section 10):**
+- Severity "Critical" and "High" incidents must trigger PDPA breach assessment
+- Security team must assess PDPA notification requirements alongside MAS reporting
+
+---
+
+## 12. MAS Outsourcing Guidelines Compliance
+
+### 12.1 Kiro as an Outsourced Service
+
+**Context:** AWS Kiro is an AWS-managed AI development service. Under MAS Guidelines on Outsourcing (2018 revision), financial institutions must assess and manage risks associated with outsourcing material arrangements to third-party service providers.
+
+**Outsourcing Classification:**
+
+| Factor | Assessment |
+|--------|------------|
+| **Service Provider** | Amazon Web Services (AWS) |
+| **Service** | AI-assisted software development (Kiro IDE/CLI) |
+| **Materiality** | Assess based on: impact on business operations, data sensitivity, customer impact |
+| **Data Involved** | Source code, development prompts, configuration data |
+| **Jurisdiction** | Service hosted in AWS regions; data residency configurable |
+
+### 12.2 MAS Outsourcing Requirements Mapping
+
+| MAS Outsourcing Requirement | Kiro Implementation | Evidence |
+|-----------------------------|---------------------|----------|
+| **Risk Assessment** | Technology risk assessment of Kiro deployment | Risk register entry |
+| **Due Diligence** | AWS compliance certifications (SOC 2, ISO 27001) | AWS Artifact reports |
+| **Contractual Protections** | AWS Enterprise Agreement / Addendum | Legal review |
+| **Data Protection** | Encryption, DLP, VPC isolation, data residency | Technical controls documented |
+| **Business Continuity** | Fallback to non-AI development if Kiro unavailable | BCP documentation |
+| **Audit Rights** | AWS compliance reports via AWS Artifact | Quarterly review |
+| **Concentration Risk** | Assess dependency on single AI coding tool | Risk assessment |
+| **Sub-outsourcing** | AWS use of Amazon Bedrock foundation models | Sub-contractor review |
+| **Exit Strategy** | Ability to operate SDLC without Kiro | Documented procedures |
+| **MAS Notification** | Notify MAS if arrangement is material outsourcing | Regulatory filing |
+
+### 12.3 Due Diligence Checklist
+
+- [ ] AWS SOC 2 Type II report reviewed (via AWS Artifact)
+- [ ] AWS ISO 27001 certification verified
+- [ ] AWS CSA STAR certification checked
+- [ ] AWS MTCS (Multi-Tier Cloud Security) Level 3 confirmed for Singapore
+- [ ] Data processing agreement (DPA) in place with AWS
+- [ ] Sub-processor list reviewed (Bedrock model providers)
+- [ ] Service Level Agreement (SLA) reviewed for Kiro availability
+- [ ] Right to audit clause confirmed in enterprise agreement
+- [ ] Exit/transition plan documented
+
+### 12.4 Concentration Risk & Exit Strategy
+
+**Concentration Risk Mitigation:**
+- Developers maintain proficiency in non-AI development workflows
+- Critical code reviews performed without AI assistance as validation
+- No single-point dependency on Kiro for production deployments
+
+**Exit Strategy:**
+```
+If Kiro service discontinued or contract terminated:
+1. Export all locally-stored configurations and MCP settings
+2. Preserve prompt logs for audit trail continuity
+3. Transition to standard IDE without AI assistance
+4. Retrain developers on manual code review processes
+5. Update SDLC procedures to remove Kiro-specific steps
+6. Notify MAS if material outsourcing arrangement changes
+```
+
+---
+
+## 13. AI/ML Governance: MAS FEAT Principles
+
+### 13.1 FEAT Framework for AI-Assisted Development
+
+The Monetary Authority of Singapore published the **Fairness, Ethics, Accountability, and Transparency (FEAT)** principles to guide the responsible use of Artificial Intelligence and Data Analytics (AIDA) in financial services. These principles apply to the use of Kiro (AI-powered development assistant) in banking SDLC environments.
+
+| FEAT Principle | Application to Kiro | Controls |
+|----------------|---------------------|----------|
+| **Fairness** | AI-generated code should not introduce discriminatory logic | Code review gates for bias detection |
+| **Ethics** | AI tool usage should align with ethical standards | Developer training + usage guidelines |
+| **Accountability** | Clear accountability for AI-generated code quality | Human review required before merge |
+| **Transparency** | AI involvement in code generation must be traceable | Prompt logging + code annotation |
+
+### 13.2 Accountability Controls
+
+**Principle:** A human developer is always accountable for code quality, regardless of whether it was AI-generated.
+
+**Implementation:**
+```json
+{
+  "kiro.codeGeneration": {
+    "requireHumanReview": true,
+    "annotateAIGenerated": true,
+    "blockDirectMerge": true,
+    "minimumReviewers": 2,
+    "auditTrail": "cloudtrail"
+  }
+}
+```
+
+**Code Attribution:**
+- All Kiro-generated code must pass through standard code review
+- Pull requests should indicate AI-assisted sections (recommended, not mandatory)
+- CloudTrail logs provide full traceability of AI-assisted development activities
+
+### 13.3 Transparency & Auditability
+
+**Prompt Logging for Audit:**
+```bash
+# Enable comprehensive prompt logging
+aws q put-prompt-logging-configuration \
+  --s3-bucket-name kiro-prompts-<account-id> \
+  --kms-key-id arn:aws:kms:ap-southeast-1:account:key/xxxxx
+```
+
+**What is Logged:**
+- All prompts sent to Kiro (questions, code generation requests)
+- All responses from Kiro (code suggestions, explanations)
+- MCP tool invocations and parameters
+- User identity and session context
+
+**Audit Trail Retention:** Minimum 7 years for financial services (aligned with MAS record-keeping requirements).
+
+### 13.4 Fairness & Bias Considerations
+
+**Risk:** AI-generated code could inadvertently introduce biased logic in:
+- Credit scoring algorithms
+- Customer segmentation
+- Risk assessment models
+- Fee calculation logic
+
+**Mitigation:**
+- Kiro-generated financial logic must undergo additional review by domain experts
+- Automated bias testing in CI/CD pipeline for models and decision logic
+- Steering files should include bias-awareness instructions:
+
+```yaml
+# .kiro/steering/fairness.md
+guidelines:
+  - "Flag any code that makes decisions based on protected characteristics"
+  - "Ensure fee calculations are applied consistently across customer segments"
+  - "Credit scoring logic must be explainable and auditable"
+  - "Alert if ML model inputs include demographic proxies"
+```
+
+---
+
+## 14. Industry Standards: ABS Guidelines
+
+### 14.1 ABS Cloud Computing Implementation Guide
+
+The **Association of Banks in Singapore (ABS)** published the Cloud Computing Implementation Guide to help financial institutions adopt cloud services securely. Key requirements relevant to Kiro:
+
+| ABS Requirement | Kiro Implementation |
+|-----------------|---------------------|
+| Data classification before cloud adoption | Classify code/data touched by Kiro per bank's data policy |
+| Cloud service provider due diligence | AWS due diligence (SOC 2, ISO 27001, MTCS L3) |
+| Data residency and sovereignty | Configure ap-southeast-1, disable cross-region inference |
+| Access control and identity management | IAM Identity Center + Enterprise IdP + MFA |
+| Encryption requirements | TLS 1.2+ in transit, KMS at rest |
+| Incident management | Incident response plan (Section 10) |
+| Exit strategy | Documented exit plan (Section 12.4) |
+
+### 14.2 ABS Penetration Testing Guidelines
+
+**Relevance:** If Kiro environments (WorkSpaces, VPC endpoints, MCP servers) are in scope for penetration testing:
+
+- **Frequency:** At least annually for internet-facing systems; risk-based for internal (MAS TRM 13.2)
+- **Scope:** Include VPC endpoint security, WorkSpaces access controls, MCP server attack surface
+- **Types:** Combination of blackbox and greybox testing (MAS TRM 13.2.1)
+- **Production testing:** Proper safeguards required (MAS TRM 13.2.3)
+
+### 14.3 ABS Red Team Guidelines
+
+**Applicability:** For adversarial attack simulation of Kiro environments:
+
+- Test if attackers can bypass MCP server restrictions
+- Test if DLP controls can be circumvented via AI prompts
+- Test if unauthorized MCP servers can be installed despite GPO
+- Validate incident detection and response capabilities for Kiro-related threats
+
+---
+
+## Expanded Compliance Matrix
+
+### Comprehensive Regulatory Mapping
+
+| Regulation | Section | Control Area | Kiro Implementation | Document Reference |
+|------------|---------|--------------|---------------------|-------------------|
+| **MAS TRM** | 3.1 | Governance & Oversight | IAM IDC + Enterprise IdP | Part 1, Section 2 |
+| **MAS TRM** | 5.1 | IT Project Management | Supervised mode + code review | Part 2, Section 6 |
+| **MAS TRM** | 5.2 | Security-by-Design | Skills + steering files | Skills Guide |
+| **MAS TRM** | 6.1 | Software Development | SDLC security controls | Part 2, Section 6 |
+| **MAS TRM** | 7.1 | IT Service Management | Change management workflow | Part 2, Section 6.3 |
+| **MAS TRM** | 9.1 | Access Control | MFA + session management + RBAC | Part 1, Section 2.1.3 |
+| **MAS TRM** | 9.3 | Remote Access | VPC + PrivateLink | Part 1, Section 3 |
+| **MAS TRM** | 10.1 | Cryptography | TLS 1.2+ in transit, KMS at rest | Part 2, Section 7 |
+| **MAS TRM** | 11.1 | Data Security | DLP + encryption + PDPA controls | Part 1, Section 4.1.3 |
+| **MAS TRM** | 11.2 | Network Security | VPC endpoints + SG + NACLs | Part 1, Section 3.2 |
+| **MAS TRM** | 11.5 | IoT/Endpoint | WorkSpaces VDI hardening | Part 1, Section 4 |
+| **MAS TRM** | 12.1 | Cyber Threat Intel | CloudWatch + monitoring | Part 2, Section 8 |
+| **MAS TRM** | 12.3 | Incident Response | Escalation matrix + MAS notification | Part 2, Section 10 |
+| **MAS TRM** | 13.1 | Vulnerability Assessment | Annual VA of Kiro environments | Part 2, Section 14.2 |
+| **MAS TRM** | 13.2 | Penetration Testing | Annual PT of VPC + WorkSpaces | Part 2, Section 14.2 |
+| **MAS TRM** | 14.1 | Online Financial Services | Not directly applicable (dev tool) | N/A |
+| **MAS TRM** | 15.1 | IT Audit | CloudTrail + compliance validation | Part 2, Section 8 |
+| **PDPA** | Part IV | Data Protection | DLP + data classification + encryption | Part 2, Section 11 |
+| **PDPA** | Part VIA | Data Breach | 3-day PDPC notification | Part 2, Section 11.4 |
+| **MAS Outsourcing** | 4.1 | Risk Assessment | Outsourcing risk register | Part 2, Section 12 |
+| **MAS Outsourcing** | 5.1 | Due Diligence | AWS compliance certifications | Part 2, Section 12.3 |
+| **MAS Outsourcing** | 8.1 | Exit Strategy | Documented transition plan | Part 2, Section 12.4 |
+| **MAS FEAT** | All | AI Governance | FEAT controls for Kiro | Part 2, Section 13 |
+| **ABS Cloud** | All | Cloud Security | Defense-in-depth for Kiro | Part 2, Section 14.1 |
+
+---
+
 ## Document Complete
 
 **Total Coverage:**
-- ✅ Sections 1-4: Architecture, Identity, Network, VDI (Part 1)
-- ✅ Sections 5-10: MCP Governance, SDLC, Data Protection, Compliance, Operations, Incident Response (Part 2)
+- Sections 1-4: Architecture, Identity, Network, VDI (Part 1)
+- Sections 5-10: MCP Governance, SDLC, Data Protection, Compliance, Operations, Incident Response (Part 2)
+- Sections 11-14: PDPA, Outsourcing, AI/ML Governance, ABS Industry Standards (Part 2, Enhanced)
 
 **Implementation Ready:** All sections include production-ready configurations, scripts, and compliance mappings for Singapore banking environments.
 
 ---
 
-## License
+## License & Disclaimer
 
-This documentation is licensed under the MIT License.
+This documentation is licensed under the [MIT License](LICENSE).
 
-Copyright (c) 2026
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this documentation and associated files (the "Documentation"), to deal in the Documentation without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Documentation, and to permit persons to whom the Documentation is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Documentation.
-
-THE DOCUMENTATION IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE DOCUMENTATION OR THE USE OR OTHER DEALINGS IN THE DOCUMENTATION.
-
-## Disclaimer
-
-This documentation is provided for informational and educational purposes only. It does not constitute:
-- Legal advice or regulatory guidance
-- Professional security consulting services
-- Compliance certification or validation
-- Endorsement of any specific implementation approach
-
-**No Liability:** The authors and contributors accept no responsibility or liability for:
-- Any security breaches, data losses, or compliance violations
-- Implementation decisions made based on this documentation
-- Accuracy, completeness, or suitability of the information provided
-- Any damages or losses arising from the use of this documentation
-
-**User Responsibility:** Organizations using this documentation must:
-- Conduct their own independent security assessments and risk analysis
-- Consult with qualified legal, compliance, and security professionals
-- Validate all implementations against their specific regulatory requirements
-- Maintain full responsibility for their security posture and compliance status
-- Adapt all guidance to their specific organizational context and risk profile
-
-**Regulatory Compliance:** This documentation references MAS guidelines but does not guarantee compliance. Organizations are solely responsible for ensuring their implementations meet all applicable regulatory requirements.
+> **Disclaimer:** This documentation is provided for informational and educational purposes only. It does not constitute legal advice, regulatory guidance, or professional security consulting. Organizations must conduct independent security assessments, consult qualified professionals, and validate all implementations against their specific regulatory requirements. See [README.md](README.md#disclaimer) for full disclaimer.
