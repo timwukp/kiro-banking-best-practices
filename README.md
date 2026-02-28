@@ -88,6 +88,13 @@ This guide addresses all these challenges with practical, tested implementations
 | **[Kiro-Agentic-SDLC-Banking-Best-Practices.md](Kiro-Agentic-SDLC-Banking-Best-Practices.md)** | Comprehensive implementation guide (Sections 1-4) | ✅ Complete |
 | **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-14) incl. PDPA, Outsourcing, AI/ML, ABS | ✅ Complete |
 
+### Infrastructure as Code
+
+| Document | Description |
+|----------|-------------|
+| **[cdk/](cdk/)** | AWS CDK (TypeScript) modules for MAS-compliant infrastructure |
+| **[cdk/README.md](cdk/README.md)** | CDK deployment guide with architecture diagram |
+
 ### Technical Reference
 
 | Document | Description |

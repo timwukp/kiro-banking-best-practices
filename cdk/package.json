@@ -1,0 +1,31 @@
+{
+  "name": "kiro-banking-cdk",
+  "version": "1.2.0",
+  "description": "AWS CDK infrastructure for MAS-compliant Kiro banking environments",
+  "bin": {
+    "kiro-banking": "bin/kiro-banking.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy --all",
+    "diff": "cdk diff",
+    "nag": "cdk synth 2>&1 | grep -E '(AwsSolutions|Warning|Error)'"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "aws-cdk": "^2.170.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "~5.4.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.170.0",
+    "cdk-nag": "^2.28.0",
+    "constructs": "^10.0.0"
+  }
+}

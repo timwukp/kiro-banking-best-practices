@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3] - 2026-02-28
+
+### Added
+- **AWS CDK Infrastructure** (`cdk/`): TypeScript CDK modules for MAS-compliant deployment
+  - `EncryptionStack`: 3 KMS customer-managed keys (audit, data, workspaces) with rotation
+  - `NetworkStack`: VPC + 8 PrivateLink endpoints + security groups + NACLs + flow logs
+  - `MonitoringStack`: CloudTrail + S3 log bucket + 4 CloudWatch security alarms + SNS
+  - `ComplianceStack`: 18 AWS Config managed rules mapped to MAS TRM + PDPA
+- CDK Nag (AwsSolutions) integration for automated security validation
+- CDK test suite with assertions for all stacks
+- Environment configs (dev/prod) with banking-specific defaults
+
+---
+
 ## [1.2] - 2026-02-28
 
 ### Added
