@@ -88,12 +88,26 @@ This guide addresses all these challenges with practical, tested implementations
 | **[Kiro-Agentic-SDLC-Banking-Best-Practices.md](Kiro-Agentic-SDLC-Banking-Best-Practices.md)** | Comprehensive implementation guide (Sections 1-4) | ✅ Complete |
 | **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-14) incl. PDPA, Outsourcing, AI/ML, ABS | ✅ Complete |
 
+### Kiro Skills (Working Implementations)
+
+| Skill | Description | MAS Reference |
+|-------|-------------|---------------|
+| **[.kiro/skills/mas-compliance-review/](.kiro/skills/mas-compliance-review/)** | Automated MAS TRM + PDPA compliance checking | TRM 9, 10, 11, 15 + PDPA |
+| **[.kiro/skills/pii-detection/](.kiro/skills/pii-detection/)** | Singapore-specific PII detection and masking | PDPA + TRM 11.1 |
+| **[.kiro/skills/banking-code-review/](.kiro/skills/banking-code-review/)** | Banking security code review with checklists | TRM 6, 9, 10, 11 + AIRG |
+
 ### Infrastructure as Code
 
 | Document | Description |
 |----------|-------------|
 | **[cdk/](cdk/)** | AWS CDK (TypeScript) modules for MAS-compliant infrastructure |
 | **[cdk/README.md](cdk/README.md)** | CDK deployment guide with architecture diagram |
+
+### CI/CD Automation
+
+| Workflow | Description |
+|----------|-------------|
+| **[.github/workflows/validate.yml](.github/workflows/validate.yml)** | Automated validation: docs, CDK synth/test, skill structure |
 
 ### Technical Reference
 
@@ -389,9 +403,11 @@ For questions, issues, or feedback:
 | 1.0 | 2026-02-25 | Initial release (Sections 1-4) |
 | 1.1 | 2026-02-26 | Complete sections 5-10, add README |
 | 1.2 | 2026-02-28 | Regulatory enhancement: PDPA, Outsourcing, AI/ML, ABS guidelines |
+| 1.3 | 2026-02-28 | AWS CDK infrastructure modules (4 stacks) |
+| 1.4 | 2026-02-28 | Working Kiro Skills (3 skills) + GitHub Actions CI/CD |
 
 ---
 
-**Version:** 1.2
+**Version:** 1.4
 **Last Updated:** February 28, 2026
 **Maintained By:** Security Architecture Team

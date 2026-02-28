@@ -1,8 +1,20 @@
 # PDF files - regulatory documents not for distribution
 *.pdf
 
-# Kiro configuration and local settings
-.kiro/
+# Kiro local configuration (steering, specs, hooks)
+.kiro/steering/
+.kiro/specs/
+.kiro/hooks/
+.kiro/settings/
+
+# Kiro skills ARE tracked (shared with team)
+# !.kiro/skills/
+
+# CDK build artifacts
+cdk/node_modules/
+cdk/cdk.out/
+cdk/*.js
+cdk/*.d.ts
 
 # macOS
 .DS_Store

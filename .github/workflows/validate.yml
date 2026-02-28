@@ -1,0 +1,138 @@
+name: Repository Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-docs:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check required files exist
+        run: |
+          ERRORS=0
+          for file in .gitignore LICENSE README.md CHANGELOG.md CONTRIBUTING.md \
+            Kiro-Agentic-SDLC-Banking-Best-Practices.md \
+            Kiro-Banking-Best-Practices-Part2.md \
+            Banking-Skills-Development-Guide.md; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Required file missing: $file"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          exit $ERRORS
+
+      - name: Check no PDFs tracked
+        run: |
+          if git ls-files | grep -iE '\.(pdf)$'; then
+            echo "::error::PDF files found in git tracking"
+            exit 1
+          fi
+
+      - name: Check no .kiro config tracked
+        run: |
+          if git ls-files | grep '\.kiro/steering\|\.kiro/specs\|\.kiro/hooks'; then
+            echo "::error::.kiro config files found in git tracking"
+            exit 1
+          fi
+
+      - name: Scan for secrets
+        run: |
+          ERRORS=0
+          # AWS Access Keys
+          if grep -r -E 'AKIA[0-9A-Z]{16}' --include='*.md' --include='*.ts' --include='*.json' . | grep -v 'EXAMPLE' | grep -v 'example' | grep -v 'node_modules'; then
+            echo "::error::Potential AWS access key detected"
+            ERRORS=$((ERRORS + 1))
+          fi
+          # Private keys
+          if grep -r -l 'BEGIN.*PRIVATE KEY' --include='*.md' --include='*.ts' --include='*.pem' .; then
+            echo "::error::Private key material detected"
+            ERRORS=$((ERRORS + 1))
+          fi
+          exit $ERRORS
+
+      - name: Validate markdown structure
+        run: |
+          for md in *.md; do
+            if ! head -5 "$md" | grep -qE '^# '; then
+              echo "::warning::$md missing H1 heading in first 5 lines"
+            fi
+          done
+
+  validate-cdk:
+    name: Validate CDK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CDK dependencies
+        working-directory: cdk
+        run: npm ci
+
+      - name: TypeScript compile check
+        working-directory: cdk
+        run: npx tsc --noEmit
+
+      - name: Run CDK tests
+        working-directory: cdk
+        run: npx jest --passWithNoTests
+
+      - name: CDK synth (validates all stacks + CDK Nag)
+        working-directory: cdk
+        run: npx cdk synth --context env=dev 2>&1
+        env:
+          CDK_DEFAULT_ACCOUNT: '000000000000'
+          CDK_DEFAULT_REGION: 'ap-southeast-1'
+
+  validate-skills:
+    name: Validate Kiro Skills
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check skill structure
+        run: |
+          ERRORS=0
+          for skill_dir in .kiro/skills/*/; do
+            skill_name=$(basename "$skill_dir")
+            # Check SKILL.md exists
+            if [ ! -f "${skill_dir}SKILL.md" ]; then
+              echo "::error::Missing SKILL.md in $skill_dir"
+              ERRORS=$((ERRORS + 1))
+              continue
+            fi
+            # Check frontmatter has required fields
+            if ! head -10 "${skill_dir}SKILL.md" | grep -q 'name:'; then
+              echo "::error::Missing 'name' in frontmatter of ${skill_dir}SKILL.md"
+              ERRORS=$((ERRORS + 1))
+            fi
+            if ! head -10 "${skill_dir}SKILL.md" | grep -q 'description:'; then
+              echo "::error::Missing 'description' in frontmatter of ${skill_dir}SKILL.md"
+              ERRORS=$((ERRORS + 1))
+            fi
+            # Check name matches folder
+            YAML_NAME=$(grep '^name:' "${skill_dir}SKILL.md" | head -1 | sed 's/name: *//')
+            if [ "$YAML_NAME" != "$skill_name" ]; then
+              echo "::warning::Skill name '$YAML_NAME' doesn't match folder '$skill_name'"
+            fi
+          done
+          exit $ERRORS

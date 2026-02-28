@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.4] - 2026-02-28
+
+### Added
+- **Working Kiro Skills** (`.kiro/skills/`):
+  - `mas-compliance-review`: Automated MAS TRM + PDPA + AIRG compliance checking with 6-category review process, fail patterns, and compliance report output
+  - `pii-detection`: Singapore-specific PII detection (NRIC, FIN, credit cards, bank accounts) with PDPA-aligned masking and remediation
+  - `banking-code-review`: Structured banking code review with 6-section checklist (security, access control, data protection, audit, error handling, AI governance)
+  - Reference files: MAS TRM quick reference, PDPA developer checklist
+- **GitHub Actions CI/CD** (`.github/workflows/validate.yml`):
+  - Documentation validation (required files, no PDFs, no secrets)
+  - CDK validation (TypeScript compile, jest tests, cdk synth + CDK Nag)
+  - Skill structure validation (SKILL.md exists, frontmatter fields, name matching)
+- Updated `.gitignore` to track skills while excluding local Kiro config
+
+### Changed
+- Ingested MAS AI Risk Management Guidelines (2025 consultation paper)
+- Ingested MAS Outsourcing Guidelines (Jul 2016)
+- Ingested ABS Cloud Computing Implementation Guide 2.0
+- Enterprise IdP confirmed as Microsoft Entra ID
+
+---
+
 ## [1.3] - 2026-02-28
 
 ### Added
