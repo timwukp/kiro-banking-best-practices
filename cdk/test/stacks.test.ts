@@ -119,6 +119,6 @@ describe('ComplianceStack', () => {
   const template = Template.fromStack(stack);
 
   test('creates AWS Config rules', () => {
-    template.resourceCountIs('AWS::Config::ConfigRule', 18);
+    template.resourceCountIs('AWS::Config::ConfigRule', 19);
   });
 });

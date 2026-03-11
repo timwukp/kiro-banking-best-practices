@@ -47,8 +47,9 @@ This guide addresses all these challenges with practical, tested implementations
 ## Key Features
 
 ### 🔐 Enterprise Security Controls
-- AWS IAM Identity Center integration with Enterprise IdP (Azure AD, Okta, Ping Identity)
-- SAML 2.0 authentication with MFA enforcement
+- Two architecture options: via AWS IAM Identity Center or direct IdP federation (Okta, Entra ID)
+- SAML 2.0 / OIDC authentication with MFA enforcement
+- SCIM provisioning for automated user and group synchronization
 - Blocking of social logins and AWS Builder IDs
 - Session management and timeout policies
 
@@ -205,11 +206,15 @@ Week 5-6: Monitoring & Compliance
 
 ## Security Architecture
 
-### High-Level Architecture
+This guide supports two architecture options depending on your organization's identity management strategy.
+
+### Option A: Via AWS IAM Identity Center (Default)
+
+Enterprise IdP federates through IAM Identity Center, which centrally manages access to both Kiro subscriptions and WorkSpaces. This is the traditional approach and provides unified access management across all AWS services.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Enterprise IdP (Azure AD/Okta)              │
+│                     Enterprise IdP (Entra ID/Okta)              │
 │                     SAML 2.0 + SCIM Provisioning                │
 └────────────────────────────┬────────────────────────────────────┘
                              │
@@ -217,15 +222,16 @@ Week 5-6: Monitoring & Compliance
 ┌─────────────────────────────────────────────────────────────────┐
 │                  AWS IAM Identity Center                        │
 │              MFA Enforcement + Session Management               │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Amazon WorkSpaces (VDI)                      │
-│         DLP Agents + GPO Hardening + Centralized MCP            │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
+└──────────┬─────────────────────────────────────┬────────────────┘
+           │                                     │
+           ▼                                     ▼
+┌─────────────────────────┐   ┌───────────────────────────────────┐
+│   Kiro Subscription     │   │      Amazon WorkSpaces (VDI)      │
+│   Management            │   │  DLP Agents + GPO + Centralized   │
+│                         │   │  MCP Configuration                │
+└─────────────────────────┘   └──────────────┬────────────────────┘
+                                             │
+                                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                  VPC with Private Subnets                       │
 │         Security Groups + NACLs + VPC Endpoints                 │
@@ -244,9 +250,61 @@ Week 5-6: Monitoring & Compliance
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Option B: Direct IdP Federation (No IAM Identity Center)
+
+Since [Kiro v0.9.40](https://kiro.dev/changelog/ide/external-identity-provider-support-for-kiro-ide/), enterprise teams can connect **Okta** or **Microsoft Entra ID** directly to Kiro without IAM Identity Center. Amazon WorkSpaces also supports [direct SAML 2.0 federation](https://docs.aws.amazon.com/workspaces/latest/adminguide/amazon-workspaces-saml.html) with external IdPs when using AWS Directory Service directories.
+
+This option removes IAM Identity Center entirely, simplifying the architecture for organizations that prefer direct IdP integration.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   Enterprise IdP (Entra ID/Okta)                │
+│              OIDC + SAML 2.0 + SCIM Provisioning                │
+└──────────┬─────────────────────────────────────┬────────────────┘
+           │ (Direct OIDC/SCIM)                  │ (Direct SAML 2.0)
+           ▼                                     ▼
+┌─────────────────────────┐   ┌───────────────────────────────────┐
+│   Kiro IDE/CLI          │   │      Amazon WorkSpaces (VDI)      │
+│   - Domain verification │   │  - AWS Directory Service          │
+│   - SCIM user sync      │   │  - SAML 2.0 federation            │
+│   - OIDC authentication │   │  - DLP Agents + GPO + Centralized │
+│                         │   │    MCP Configuration               │
+└─────────────────────────┘   └──────────────┬────────────────────┘
+                                             │
+                                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  VPC with Private Subnets                       │
+│         Security Groups + NACLs + VPC Endpoints                 │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              AWS PrivateLink (VPC Interface Endpoints)          │
+│                   Private Connectivity to Kiro                  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        AWS Kiro Service                         │
+│              CloudTrail Logging + CloudWatch Monitoring         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Option B Requirements:**
+- Kiro: Create OIDC + SAML apps in your IdP, configure SCIM provisioning, verify company domain via DNS ([Okta setup](https://kiro.dev/docs/enterprise/identity-provider/okta/))
+- WorkSpaces: AWS Directory Service (Managed AD, Simple AD, or AD Connector) with SAML 2.0 configured for your IdP
+- MFA enforcement handled directly by the IdP (not IAM Identity Center)
+
+**When to choose Option B:**
+- Your organization already uses Okta or Entra ID as the primary identity platform
+- You want fewer AWS service dependencies in the authentication chain
+- You prefer a single IdP configuration that works across both Kiro IDE and CLI
+
 ### Security Layers
 
-1. **Identity Layer** - Enterprise IdP + IAM Identity Center + MFA
+Both architectures share the same security layers:
+
+1. **Identity Layer** - Enterprise IdP + MFA (via IAM Identity Center or direct federation)
 2. **Network Layer** - VPC + PrivateLink + Security Groups
 3. **Endpoint Layer** - WorkSpaces VDI + DLP + GPO
 4. **Application Layer** - MCP Governance + Centralized Configuration
@@ -363,7 +421,10 @@ This documentation is provided for informational and educational purposes only. 
 - [Kiro Privacy and Security](https://kiro.dev/docs/privacy-and-security/)
 - [Kiro MCP Security](https://kiro.dev/docs/mcp/security/)
 - [Kiro MCP Configuration](https://kiro.dev/docs/mcp/configuration/)
+- [Kiro External IdP Support (Okta)](https://kiro.dev/docs/enterprise/identity-provider/okta/)
+- [Kiro External IdP Changelog](https://kiro.dev/changelog/ide/external-identity-provider-support-for-kiro-ide/)
 - [AWS IAM Identity Center](https://docs.aws.amazon.com/singlesignon/)
+- [Amazon WorkSpaces SAML 2.0 Authentication](https://docs.aws.amazon.com/workspaces/latest/adminguide/amazon-workspaces-saml.html)
 - [AWS PrivateLink](https://docs.aws.amazon.com/vpc/latest/privatelink/)
 - [Amazon WorkSpaces](https://docs.aws.amazon.com/workspaces/)
 
@@ -405,9 +466,10 @@ For questions, issues, or feedback:
 | 1.2 | 2026-02-28 | Regulatory enhancement: PDPA, Outsourcing, AI/ML, ABS guidelines |
 | 1.3 | 2026-02-28 | AWS CDK infrastructure modules (4 stacks) |
 | 1.4 | 2026-02-28 | Working Kiro Skills (3 skills) + GitHub Actions CI/CD |
+| 1.5 | 2026-03-11 | Add Option B: Direct IdP federation architecture (no IAM IDC), fix CDK compilation and tests |
 
 ---
 
-**Version:** 1.4
-**Last Updated:** February 28, 2026
+**Version:** 1.5
+**Last Updated:** March 11, 2026
 **Maintained By:** Security Architecture Team

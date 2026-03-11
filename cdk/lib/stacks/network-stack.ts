@@ -138,7 +138,7 @@ export class NetworkStack extends cdk.Stack {
     // SSO/Identity Center endpoint
     new ec2.InterfaceVpcEndpoint(this, 'SsoEndpoint', {
       vpc: this.vpc,
-      service: ec2.InterfaceVpcEndpointAwsService.SSO,
+      service: ec2.InterfaceVpcEndpointAwsService.IAM_IDENTITY_CENTER,
       subnets: endpointSubnets,
       securityGroups: [this.endpointSecurityGroup],
       privateDnsEnabled: true,

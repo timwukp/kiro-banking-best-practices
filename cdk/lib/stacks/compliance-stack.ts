@@ -189,7 +189,7 @@ export class ComplianceStack extends cdk.Stack {
 
     // --- Outputs ---
     new cdk.CfnOutput(this, 'ComplianceRuleCount', {
-      value: '18',
+      value: '19',
       description: 'Number of AWS Config compliance rules deployed',
     });
   }
