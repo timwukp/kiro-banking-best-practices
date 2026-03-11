@@ -125,3 +125,7 @@ Exclude from detection:
 - Regex patterns defined in security scanning code
 - Documentation with `# Example:` or `# Sample:` context
 - UUID patterns that match postal code length
+
+## References
+
+- See `references/singapore-pii-patterns.md` for detailed Singapore PII patterns, regex, and masking standards

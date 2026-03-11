@@ -154,3 +154,8 @@ Reviewer: Kiro (AI-assisted) + {human_reviewer}
 ## Recommendation
 {summary recommendation with specific actions}
 ```
+
+## References
+
+- See `references/banking-security-checklist.md` for the full review checklist with code examples
+- See `references/owasp-banking-top10.md` for OWASP Top 10 mapped to MAS TRM sections
