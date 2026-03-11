@@ -1,7 +1,7 @@
 #!/bin/bash
 # Repository Validation Script
 # Run this before pushing to GitHub
-# Enhanced v1.2 - February 2026
+# Enhanced v1.3 - March 2026
 
 ERRORS=0
 WARNINGS=0
@@ -27,6 +27,8 @@ required_files=(
     "Banking-Skills-Development-Guide.md"
     "CONTRIBUTING.md"
     "CHANGELOG.md"
+    "CLAUDE.md"
+    "SECURITY.md"
 )
 
 for file in "${required_files[@]}"; do
@@ -48,13 +50,13 @@ else
 fi
 echo ""
 
-# ─── CHECK 3: No .kiro folder in git ─────────────────
-echo "[3/8] Checking for .kiro folder in git tracking..."
-if git ls-files 2>/dev/null | grep '\.kiro/' > /dev/null 2>&1; then
-    error ".kiro folder files found in git tracking:"
-    git ls-files | grep '\.kiro/' | while read -r f; do echo "    - $f"; done
+# ─── CHECK 3: No .kiro config files in git (skills ARE allowed) ───
+echo "[3/8] Checking for .kiro config files in git tracking..."
+if git ls-files 2>/dev/null | grep -E '\.kiro/(steering|specs|hooks|settings)/' > /dev/null 2>&1; then
+    error ".kiro config files found in git tracking:"
+    git ls-files | grep -E '\.kiro/(steering|specs|hooks|settings)/' | while read -r f; do echo "    - $f"; done
 else
-    pass "No .kiro folder tracked"
+    pass "No .kiro config files tracked (skills are allowed)"
 fi
 echo ""
 

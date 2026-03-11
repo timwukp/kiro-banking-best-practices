@@ -1,13 +1,13 @@
 # PDF files - regulatory documents not for distribution
 *.pdf
 
-# Kiro local configuration (steering, specs, hooks)
-.kiro/steering/
+# Kiro local configuration (specs, hooks, settings)
 .kiro/specs/
 .kiro/hooks/
 .kiro/settings/
 
-# Kiro skills ARE tracked (shared with team)
+# Kiro skills and steering files ARE tracked (shared with team)
+# Steering files provide sample banking standards for Kiro context
 # !.kiro/skills/
 
 # CDK build artifacts

@@ -24,7 +24,8 @@ jobs:
           for file in .gitignore LICENSE README.md CHANGELOG.md CONTRIBUTING.md \
             Kiro-Agentic-SDLC-Banking-Best-Practices.md \
             Kiro-Banking-Best-Practices-Part2.md \
-            Banking-Skills-Development-Guide.md; do
+            Banking-Skills-Development-Guide.md \
+            CLAUDE.md SECURITY.md; do
             if [ ! -f "$file" ]; then
               echo "::error::Required file missing: $file"
               ERRORS=$((ERRORS + 1))
@@ -39,10 +40,10 @@ jobs:
             exit 1
           fi
 
-      - name: Check no .kiro config tracked
+      - name: Check no .kiro config tracked (skills are allowed)
         run: |
-          if git ls-files | grep '\.kiro/steering\|\.kiro/specs\|\.kiro/hooks'; then
-            echo "::error::.kiro config files found in git tracking"
+          if git ls-files | grep -E '\.kiro/(steering|specs|hooks|settings)/'; then
+            echo "::error::.kiro config files found in git tracking (steering/specs/hooks/settings should be gitignored)"
             exit 1
           fi
 
@@ -88,7 +89,7 @@ jobs:
 
       - name: TypeScript compile check
         working-directory: cdk
-        run: npx tsc --noEmit
+        run: npx tsc
 
       - name: Run CDK tests
         working-directory: cdk

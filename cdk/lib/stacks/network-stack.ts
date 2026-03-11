@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
+import { NagSuppressions } from 'cdk-nag';
 import { KiroBankingConfig } from '../../config/environments';
 
 /**
@@ -196,6 +197,14 @@ export class NetworkStack extends cdk.Stack {
       direction: ec2.TrafficDirection.EGRESS,
       ruleAction: ec2.Action.ALLOW,
     });
+
+    // CDK Nag suppressions - NACLs are intentional for MAS TRM 11.2 defense-in-depth
+    NagSuppressions.addResourceSuppressions(endpointNacl, [
+      {
+        id: 'AwsSolutions-VPC3',
+        reason: 'NACLs are required for MAS TRM Section 11.2 defense-in-depth network security alongside security groups',
+      },
+    ], true);
 
     // --- Outputs ---
     new cdk.CfnOutput(this, 'VpcId', {

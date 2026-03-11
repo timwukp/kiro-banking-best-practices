@@ -88,6 +88,8 @@ This guide addresses all these challenges with practical, tested implementations
 | **[README-Kiro-Banking-Best-Practices.md](README-Kiro-Banking-Best-Practices.md)** | Detailed overview and quick start guide | ✅ Complete |
 | **[Kiro-Agentic-SDLC-Banking-Best-Practices.md](Kiro-Agentic-SDLC-Banking-Best-Practices.md)** | Comprehensive implementation guide (Sections 1-4) | ✅ Complete |
 | **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-14) incl. PDPA, Outsourcing, AI/ML, ABS | ✅ Complete |
+| **[Banking-Skills-Development-Guide.md](Banking-Skills-Development-Guide.md)** | How to build MAS-compliant Kiro Skills for banking | ✅ Complete |
+| **[SECURITY.md](SECURITY.md)** | Security vulnerability reporting policy | ✅ Complete |
 
 ### Kiro Skills (Working Implementations)
 
@@ -103,6 +105,13 @@ This guide addresses all these challenges with practical, tested implementations
 |----------|-------------|
 | **[cdk/](cdk/)** | AWS CDK (TypeScript) modules for MAS-compliant infrastructure |
 | **[cdk/README.md](cdk/README.md)** | CDK deployment guide with architecture diagram |
+
+### Steering Files (Sample Kiro Configuration)
+
+| File | Description |
+|------|-------------|
+| **[.kiro/steering/banking-standards.md](.kiro/steering/banking-standards.md)** | Security requirements, prohibited patterns, data handling rules |
+| **[.kiro/steering/fairness.md](.kiro/steering/fairness.md)** | MAS FEAT principles for bias prevention in financial logic |
 
 ### CI/CD Automation
 
