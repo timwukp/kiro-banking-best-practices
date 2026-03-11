@@ -85,7 +85,7 @@ This guide addresses all these challenges with practical, tested implementations
 
 | Document | Description | Status |
 |----------|-------------|--------|
-| **[README-Kiro-Banking-Best-Practices.md](README-Kiro-Banking-Best-Practices.md)** | Detailed overview and quick start guide | ✅ Complete |
+| **[README-Kiro-Banking-Best-Practices.md](README-Kiro-Banking-Best-Practices.md)** | Quick reference card with checklists | ✅ Complete |
 | **[Kiro-Agentic-SDLC-Banking-Best-Practices.md](Kiro-Agentic-SDLC-Banking-Best-Practices.md)** | Comprehensive implementation guide (Sections 1-4) | ✅ Complete |
 | **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-14) incl. PDPA, Outsourcing, AI/ML, ABS | ✅ Complete |
 | **[Banking-Skills-Development-Guide.md](Banking-Skills-Development-Guide.md)** | How to build MAS-compliant Kiro Skills for banking | ✅ Complete |
@@ -119,7 +119,17 @@ This guide addresses all these challenges with practical, tested implementations
 |----------|-------------|
 | **[.github/workflows/validate.yml](.github/workflows/validate.yml)** | Automated validation: docs, CDK synth/test, skill structure |
 
-### Technical Reference
+### Architecture Diagrams
+
+| Diagram | Description |
+|---------|-------------|
+| **[diagrams/architecture-option-a.png](diagrams/architecture-option-a.png)** | Option A: Via IAM Identity Center |
+| **[diagrams/architecture-option-b.png](diagrams/architecture-option-b.png)** | Option B: Direct IdP Federation |
+| **[diagrams/security-layers.png](diagrams/security-layers.png)** | MAS TRM 5-layer security model |
+
+### Technical Reference (Kiro Platform Docs)
+
+Local snapshots of Kiro platform documentation for offline/air-gapped environments. See [kiro-docs/README.md](kiro-docs/README.md) for source URLs and freshness tracking.
 
 | Document | Description |
 |----------|-------------|
@@ -221,43 +231,7 @@ This guide supports two architecture options depending on your organization's id
 
 Enterprise IdP federates through IAM Identity Center, which centrally manages access to both Kiro subscriptions and WorkSpaces. This is the traditional approach and provides unified access management across all AWS services.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Enterprise IdP (Entra ID/Okta)              │
-│                     SAML 2.0 + SCIM Provisioning                │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  AWS IAM Identity Center                        │
-│              MFA Enforcement + Session Management               │
-└──────────┬─────────────────────────────────────┬────────────────┘
-           │                                     │
-           ▼                                     ▼
-┌─────────────────────────┐   ┌───────────────────────────────────┐
-│   Kiro Subscription     │   │      Amazon WorkSpaces (VDI)      │
-│   Management            │   │  DLP Agents + GPO + Centralized   │
-│                         │   │  MCP Configuration                │
-└─────────────────────────┘   └──────────────┬────────────────────┘
-                                             │
-                                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  VPC with Private Subnets                       │
-│         Security Groups + NACLs + VPC Endpoints                 │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              AWS PrivateLink (VPC Interface Endpoints)          │
-│                   Private Connectivity to Kiro                  │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        AWS Kiro Service                         │
-│              CloudTrail Logging + CloudWatch Monitoring         │
-└─────────────────────────────────────────────────────────────────┘
-```
+![Option A Architecture](diagrams/architecture-option-a.png)
 
 ### Option B: Direct IdP Federation (No IAM Identity Center)
 
@@ -265,39 +239,7 @@ Since [Kiro v0.9.40](https://kiro.dev/changelog/ide/external-identity-provider-s
 
 This option removes IAM Identity Center entirely, simplifying the architecture for organizations that prefer direct IdP integration.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                   Enterprise IdP (Entra ID/Okta)                │
-│              OIDC + SAML 2.0 + SCIM Provisioning                │
-└──────────┬─────────────────────────────────────┬────────────────┘
-           │ (Direct OIDC/SCIM)                  │ (Direct SAML 2.0)
-           ▼                                     ▼
-┌─────────────────────────┐   ┌───────────────────────────────────┐
-│   Kiro IDE/CLI          │   │      Amazon WorkSpaces (VDI)      │
-│   - Domain verification │   │  - AWS Directory Service          │
-│   - SCIM user sync      │   │  - SAML 2.0 federation            │
-│   - OIDC authentication │   │  - DLP Agents + GPO + Centralized │
-│                         │   │    MCP Configuration               │
-└─────────────────────────┘   └──────────────┬────────────────────┘
-                                             │
-                                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  VPC with Private Subnets                       │
-│         Security Groups + NACLs + VPC Endpoints                 │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              AWS PrivateLink (VPC Interface Endpoints)          │
-│                   Private Connectivity to Kiro                  │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        AWS Kiro Service                         │
-│              CloudTrail Logging + CloudWatch Monitoring         │
-└─────────────────────────────────────────────────────────────────┘
-```
+![Option B Architecture](diagrams/architecture-option-b.png)
 
 **Option B Requirements:**
 - Kiro: Create OIDC + SAML apps in your IdP, configure SCIM provisioning, verify company domain via DNS ([Okta setup](https://kiro.dev/docs/enterprise/identity-provider/okta/))
@@ -311,7 +253,9 @@ This option removes IAM Identity Center entirely, simplifying the architecture f
 
 ### Security Layers
 
-Both architectures share the same security layers:
+Both architectures share the same 5-layer security model:
+
+![MAS TRM Security Layers](diagrams/security-layers.png)
 
 1. **Identity Layer** - Enterprise IdP + MFA (via IAM Identity Center or direct federation)
 2. **Network Layer** - VPC + PrivateLink + Security Groups
@@ -476,9 +420,10 @@ For questions, issues, or feedback:
 | 1.3 | 2026-02-28 | AWS CDK infrastructure modules (4 stacks) |
 | 1.4 | 2026-02-28 | Working Kiro Skills (3 skills) + GitHub Actions CI/CD |
 | 1.5 | 2026-03-11 | Add Option B: Direct IdP federation architecture (no IAM IDC), fix CDK compilation and tests |
+| 1.6 | 2026-03-11 | Architecture diagrams (PNG), SECURITY.md, steering samples, README consolidation, kiro-docs tracking |
 
 ---
 
-**Version:** 1.5
+**Version:** 1.6
 **Last Updated:** March 11, 2026
 **Maintained By:** Security Architecture Team

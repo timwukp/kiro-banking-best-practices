@@ -50,13 +50,13 @@ else
 fi
 echo ""
 
-# ─── CHECK 3: No .kiro config files in git (skills ARE allowed) ───
-echo "[3/8] Checking for .kiro config files in git tracking..."
-if git ls-files 2>/dev/null | grep -E '\.kiro/(steering|specs|hooks|settings)/' > /dev/null 2>&1; then
-    error ".kiro config files found in git tracking:"
-    git ls-files | grep -E '\.kiro/(steering|specs|hooks|settings)/' | while read -r f; do echo "    - $f"; done
+# ─── CHECK 3: No .kiro private config in git (skills + steering samples ARE allowed) ───
+echo "[3/8] Checking for .kiro private config files in git tracking..."
+if git ls-files 2>/dev/null | grep -E '\.kiro/(specs|hooks|settings)/' > /dev/null 2>&1; then
+    error ".kiro private config files found in git tracking:"
+    git ls-files | grep -E '\.kiro/(specs|hooks|settings)/' | while read -r f; do echo "    - $f"; done
 else
-    pass "No .kiro config files tracked (skills are allowed)"
+    pass "No .kiro private config files tracked (skills + steering are allowed)"
 fi
 echo ""
 
