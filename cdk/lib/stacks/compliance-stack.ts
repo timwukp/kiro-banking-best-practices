@@ -1,5 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import * as config from 'aws-cdk-lib/aws-config';
+import * as accessanalyzer from 'aws-cdk-lib/aws-accessanalyzer';
+import * as securityhub from 'aws-cdk-lib/aws-securityhub';
 import { Construct } from 'constructs';
 import { KiroBankingConfig } from '../../config/environments';
 
@@ -186,6 +188,19 @@ export class ComplianceStack extends cdk.Stack {
       configRuleName: `pdpa-rds-no-public-${envConfig.environment}`,
       description: 'PDPA: Ensure RDS instances are not publicly accessible',
     });
+
+    // ═══════════════════════════════════════════════════════════
+    // Security Services
+    // ═══════════════════════════════════════════════════════════
+
+    // IAM Access Analyzer
+    new accessanalyzer.CfnAnalyzer(this, 'AccessAnalyzer', {
+      analyzerName: `kiro-banking-analyzer-${envConfig.environment}`,
+      type: 'ACCOUNT',
+    });
+
+    // SecurityHub
+    new securityhub.CfnHub(this, 'SecurityHub', {});
 
     // --- Outputs ---
     new cdk.CfnOutput(this, 'ComplianceRuleCount', {

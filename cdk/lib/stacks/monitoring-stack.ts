@@ -4,7 +4,11 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as cloudwatch_actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as sns from 'aws-cdk-lib/aws-sns';
+import * as guardduty from 'aws-cdk-lib/aws-guardduty';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as events_targets from 'aws-cdk-lib/aws-events-targets';
 import { Construct } from 'constructs';
 import { KiroBankingConfig } from '../../config/environments';
 import { NagSuppressions } from 'cdk-nag';
@@ -44,6 +48,7 @@ export class MonitoringStack extends cdk.Stack {
       displayName: 'Kiro Banking Security Alerts',
       masterKey: kmsKey,
     });
+    // NOTE: Subscriptions (email, Lambda, chatbot) are managed externally per organization requirements
 
     // --- S3 Bucket: CloudTrail Audit Logs ---
     const accessLogBucket = new s3.Bucket(this, 'AccessLogBucket', {
@@ -116,7 +121,7 @@ export class MonitoringStack extends cdk.Stack {
       metricValue: '1',
     });
 
-    new cloudwatch.Alarm(this, 'UnauthorizedApiAlarm', {
+    const unauthorizedApiAlarm = new cloudwatch.Alarm(this, 'UnauthorizedApiAlarm', {
       alarmName: `kiro-banking-unauthorized-api-${config.environment}`,
       alarmDescription: 'MAS TRM 9.1: Alert on unauthorized API calls to Kiro services',
       metric: unauthorizedApiFilter.metric({
@@ -128,6 +133,7 @@ export class MonitoringStack extends cdk.Stack {
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
+    unauthorizedApiAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(this.securityTopic));
 
     // Alarm: Console sign-in without MFA
     const noMfaFilter = new logs.MetricFilter(this, 'NoMfaSignInFilter', {
@@ -138,7 +144,7 @@ export class MonitoringStack extends cdk.Stack {
       metricValue: '1',
     });
 
-    new cloudwatch.Alarm(this, 'NoMfaSignInAlarm', {
+    const noMfaSignInAlarm = new cloudwatch.Alarm(this, 'NoMfaSignInAlarm', {
       alarmName: `kiro-banking-no-mfa-signin-${config.environment}`,
       alarmDescription: 'MAS TRM 9.1: Alert on console sign-in without MFA',
       metric: noMfaFilter.metric({
@@ -150,6 +156,7 @@ export class MonitoringStack extends cdk.Stack {
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
+    noMfaSignInAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(this.securityTopic));
 
     // Alarm: IAM policy changes
     const iamPolicyChangeFilter = new logs.MetricFilter(this, 'IamPolicyChangeFilter', {
@@ -160,7 +167,7 @@ export class MonitoringStack extends cdk.Stack {
       metricValue: '1',
     });
 
-    new cloudwatch.Alarm(this, 'IamPolicyChangeAlarm', {
+    const iamPolicyChangeAlarm = new cloudwatch.Alarm(this, 'IamPolicyChangeAlarm', {
       alarmName: `kiro-banking-iam-policy-change-${config.environment}`,
       alarmDescription: 'MAS TRM 9.1: Alert on IAM policy modifications',
       metric: iamPolicyChangeFilter.metric({
@@ -172,6 +179,7 @@ export class MonitoringStack extends cdk.Stack {
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
+    iamPolicyChangeAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(this.securityTopic));
 
     // Alarm: Security group changes
     const sgChangeFilter = new logs.MetricFilter(this, 'SgChangeFilter', {
@@ -182,7 +190,7 @@ export class MonitoringStack extends cdk.Stack {
       metricValue: '1',
     });
 
-    new cloudwatch.Alarm(this, 'SgChangeAlarm', {
+    const sgChangeAlarm = new cloudwatch.Alarm(this, 'SgChangeAlarm', {
       alarmName: `kiro-banking-sg-change-${config.environment}`,
       alarmDescription: 'MAS TRM 11.2: Alert on security group modifications',
       metric: sgChangeFilter.metric({
@@ -194,6 +202,24 @@ export class MonitoringStack extends cdk.Stack {
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
+    sgChangeAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(this.securityTopic));
+
+    // --- GuardDuty ---
+    new guardduty.CfnDetector(this, 'GuardDutyDetector', {
+      enable: true,
+      findingPublishingFrequency: 'FIFTEEN_MINUTES',
+    });
+
+    // Route GuardDuty findings to the SNS security topic via EventBridge
+    const guardDutyRule = new events.Rule(this, 'GuardDutyFindingsRule', {
+      ruleName: `kiro-banking-guardduty-findings-${config.environment}`,
+      description: 'Route GuardDuty findings to SNS security alerts topic',
+      eventPattern: {
+        source: ['aws.guardduty'],
+        detailType: ['GuardDuty Finding'],
+      },
+    });
+    guardDutyRule.addTarget(new events_targets.SnsTopic(this.securityTopic));
 
     // --- Outputs ---
     new cdk.CfnOutput(this, 'AuditLogBucketName', {
