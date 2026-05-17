@@ -295,17 +295,17 @@ Both architectures share the same 5-layer security model:
 
 ### Key Compliance Controls
 
-✅ **Zero Trust Architecture** - No internet-facing endpoints, all traffic through VPC PrivateLink
-✅ **MFA Enforcement** - Required for all user access via Enterprise IdP
-✅ **Least Privilege** - IAM policies grant minimum required permissions
-✅ **Encryption** - Data encrypted at rest (KMS) and in transit (TLS 1.2+)
-✅ **Audit Trails** - CloudTrail logging with 90-day minimum retention
-✅ **Data Residency** - All data processing within Singapore region (ap-southeast-1)
-✅ **DLP Controls** - Prevent code exfiltration and credential exposure
-✅ **MCP Governance** - Centrally managed whitelist, no developer modifications
-✅ **PDPA Compliance** - Data classification, DLP rules for personal data, breach notification
-✅ **AI Governance** - FEAT principles applied, human accountability for AI-generated code
-✅ **Outsourcing Risk** - Due diligence, exit strategy, concentration risk management  
+- ✅ **Zero Trust Architecture** - No internet-facing endpoints, all traffic through VPC PrivateLink
+- ✅ **MFA Enforcement** - Required for all user access via Enterprise IdP
+- ✅ **Least Privilege** - IAM policies grant minimum required permissions
+- ✅ **Encryption** - Data encrypted at rest (KMS) and in transit (TLS 1.2+)
+- ✅ **Audit Trails** - CloudTrail logging with 90-day minimum retention
+- ✅ **Data Residency** - All data processing within Singapore region (ap-southeast-1)
+- ✅ **DLP Controls** - Prevent code exfiltration and credential exposure
+- ✅ **MCP Governance** - Centrally managed whitelist, no developer modifications
+- ✅ **PDPA Compliance** - Data classification, DLP rules for personal data, breach notification
+- ✅ **AI Governance** - FEAT principles applied, human accountability for AI-generated code
+- ✅ **Outsourcing Risk** - Due diligence, exit strategy, concentration risk management
 
 ---
 
