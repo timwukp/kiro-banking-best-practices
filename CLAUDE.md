@@ -12,9 +12,14 @@ MAS-compliant best practices for deploying AWS Kiro in Singapore banking SDLC en
 ├── Kiro-Banking-Best-Practices-Part2.md          # Sections 5-14: MCP, SDLC, PDPA, FEAT
 ├── Banking-Skills-Development-Guide.md           # How to build Kiro Skills for banking
 ├── cdk/                                          # AWS CDK TypeScript infrastructure
-│   ├── lib/stacks/                               # 4 stacks: network, encryption, monitoring, compliance
+│   ├── lib/stacks/                               # 5 stacks: network, encryption, monitoring, compliance, backup
+│   │   ├── network-stack.ts
+│   │   ├── encryption-stack.ts
+│   │   ├── monitoring-stack.ts
+│   │   ├── compliance-stack.ts
+│   │   └── backup-stack.ts
 │   ├── config/environments.ts                    # Dev/prod configs (ap-southeast-1)
-│   ├── test/stacks.test.ts                       # Jest unit tests (17 tests)
+│   ├── test/stacks.test.ts                       # Jest unit tests (27 tests)
 │   └── bin/kiro-banking.ts                       # CDK app entry point
 ├── .kiro/skills/                                 # 3 Kiro Skills with reference materials
 │   ├── mas-compliance-review/
@@ -28,7 +33,9 @@ MAS-compliant best practices for deploying AWS Kiro in Singapore banking SDLC en
 ```bash
 cd cdk
 npm install
-npm test          # Run 17 Jest tests
+npm test          # Run 27 Jest tests
+npm run lint      # ESLint check
+npm audit         # Security audit of dependencies
 npx cdk synth     # Generate CloudFormation templates
 npx cdk diff      # Preview changes
 ```

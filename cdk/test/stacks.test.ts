@@ -1,9 +1,12 @@
 import * as cdk from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Template, Match, Annotations } from 'aws-cdk-lib/assertions';
+import { Aspects } from 'aws-cdk-lib';
+import { AwsSolutionsChecks } from 'cdk-nag';
 import { NetworkStack } from '../lib/stacks/network-stack';
 import { EncryptionStack } from '../lib/stacks/encryption-stack';
 import { MonitoringStack } from '../lib/stacks/monitoring-stack';
 import { ComplianceStack } from '../lib/stacks/compliance-stack';
+import { BackupStack } from '../lib/stacks/backup-stack';
 import { devConfig } from '../config/environments';
 
 const env = { region: 'ap-southeast-1', account: '123456789012' };
@@ -111,6 +114,32 @@ describe('MonitoringStack', () => {
   test('creates SNS topic for alerts', () => {
     template.resourceCountIs('AWS::SNS::Topic', 1);
   });
+
+  test('CloudWatch alarms have alarm actions', () => {
+    template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+      AlarmActions: Match.anyValue(),
+    });
+  });
+
+  test('creates GuardDuty detector', () => {
+    template.hasResourceProperties('AWS::GuardDuty::Detector', {
+      Enable: true,
+    });
+  });
+
+  test('S3 audit bucket uses KMS encryption', () => {
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      BucketEncryption: {
+        ServerSideEncryptionConfiguration: Match.arrayWith([
+          Match.objectLike({
+            ServerSideEncryptionByDefault: {
+              SSEAlgorithm: 'aws:kms',
+            },
+          }),
+        ]),
+      },
+    });
+  });
 });
 
 describe('ComplianceStack', () => {
@@ -120,5 +149,70 @@ describe('ComplianceStack', () => {
 
   test('creates AWS Config rules', () => {
     template.resourceCountIs('AWS::Config::ConfigRule', 19);
+  });
+
+  test('creates IAM Access Analyzer', () => {
+    template.hasResourceProperties('AWS::AccessAnalyzer::Analyzer', {
+      Type: 'ACCOUNT',
+    });
+  });
+
+  test('enables SecurityHub', () => {
+    template.resourceCountIs('AWS::SecurityHub::Hub', 1);
+  });
+});
+
+describe('BackupStack', () => {
+  const app = new cdk.App();
+  const stack = new BackupStack(app, 'TestBackup', { env, config: devConfig });
+  const template = Template.fromStack(stack);
+
+  test('creates backup vault', () => {
+    template.resourceCountIs('AWS::Backup::BackupVault', 1);
+  });
+
+  test('creates backup plan', () => {
+    template.resourceCountIs('AWS::Backup::BackupPlan', 1);
+  });
+
+  test('backup plan has daily rule with 35-day retention', () => {
+    template.hasResourceProperties('AWS::Backup::BackupPlan', {
+      BackupPlan: {
+        BackupPlanRule: Match.arrayWith([
+          Match.objectLike({
+            Lifecycle: {
+              DeleteAfterDays: 35,
+            },
+          }),
+        ]),
+      },
+    });
+  });
+
+  test('backup vault is KMS encrypted', () => {
+    template.hasResourceProperties('AWS::Backup::BackupVault', {
+      EncryptionKeyArn: Match.anyValue(),
+    });
+  });
+});
+
+describe('CDK Nag Compliance', () => {
+  test('all stacks pass CDK Nag AwsSolutionsChecks', () => {
+    const app = new cdk.App();
+    const enc = new EncryptionStack(app, 'NagEnc', { env, config: devConfig });
+    const mon = new MonitoringStack(app, 'NagMon', { env, config: devConfig, kmsKey: enc.auditKey });
+    const comp = new ComplianceStack(app, 'NagComp', { env, config: devConfig });
+    const backupStack = new BackupStack(app, 'NagBackup', { env, config: devConfig });
+
+    Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
+
+    // Synth triggers the aspects
+    app.synth();
+
+    // Check for error-level annotations
+    for (const stack of [enc, mon, comp, backupStack]) {
+      const errors = Annotations.fromStack(stack).findError('*', Match.stringLikeRegexp('AwsSolutions-.*'));
+      expect(errors).toHaveLength(0);
+    }
   });
 });
