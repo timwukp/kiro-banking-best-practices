@@ -8,6 +8,7 @@ import { NetworkStack } from '../lib/stacks/network-stack';
 import { EncryptionStack } from '../lib/stacks/encryption-stack';
 import { MonitoringStack } from '../lib/stacks/monitoring-stack';
 import { ComplianceStack } from '../lib/stacks/compliance-stack';
+import { BackupStack } from '../lib/stacks/backup-stack';
 import { prodConfig, devConfig } from '../config/environments';
 
 const app = new cdk.App();
@@ -51,8 +52,15 @@ const complianceStack = new ComplianceStack(app, `KiroBanking-Compliance-${confi
   description: 'AWS Config rules for MAS TRM continuous compliance monitoring',
 });
 
+// --- Backup Stack (AWS Backup for business continuity) ---
+const backupStack = new BackupStack(app, `KiroBanking-Backup-${config.environment}`, {
+  env,
+  config,
+  description: 'AWS Backup vault and plan for business continuity (MAS TRM Section 8)',
+});
+
 // Apply tags to all resources
-for (const stack of [encryptionStack, networkStack, monitoringStack, complianceStack]) {
+for (const stack of [encryptionStack, networkStack, monitoringStack, complianceStack, backupStack]) {
   for (const [key, value] of Object.entries(config.tags)) {
     cdk.Tags.of(stack).add(key, value);
   }
