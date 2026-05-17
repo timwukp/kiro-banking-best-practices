@@ -53,6 +53,10 @@ export class BackupStack extends cdk.Stack {
       completionWindow: cdk.Duration.hours(2),
     }));
 
+    plan.addSelection('TaggedResources', {
+      resources: [backup.BackupResource.fromTag('Backup', 'daily')],
+    });
+
     // --- Outputs ---
     new cdk.CfnOutput(this, 'BackupVaultName', {
       value: vault.backupVaultName,
@@ -68,5 +72,13 @@ export class BackupStack extends cdk.Stack {
     NagSuppressions.addResourceSuppressions(backupKey, [
       { id: 'AwsSolutions-KMS5', reason: 'Key rotation is enabled via enableKeyRotation property' },
     ]);
+
+    NagSuppressions.addResourceSuppressions(plan, [
+      {
+        id: 'AwsSolutions-IAM4',
+        reason: 'AWS Backup service role requires AWS managed policy AWSBackupServiceRolePolicyForBackup to function correctly',
+        appliesTo: ['Policy::arn:<AWS::Partition>:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup'],
+      },
+    ], true);
   }
 }

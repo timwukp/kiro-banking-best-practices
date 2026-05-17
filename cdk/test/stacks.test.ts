@@ -203,6 +203,7 @@ describe('CDK Nag Compliance', () => {
     const mon = new MonitoringStack(app, 'NagMon', { env, config: devConfig, kmsKey: enc.auditKey });
     const comp = new ComplianceStack(app, 'NagComp', { env, config: devConfig });
     const backupStack = new BackupStack(app, 'NagBackup', { env, config: devConfig });
+    const net = new NetworkStack(app, 'NagNet', { env, config: devConfig });
 
     Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
 
@@ -210,7 +211,7 @@ describe('CDK Nag Compliance', () => {
     app.synth();
 
     // Check for error-level annotations
-    for (const stack of [enc, mon, comp, backupStack]) {
+    for (const stack of [enc, mon, comp, backupStack, net]) {
       const errors = Annotations.fromStack(stack).findError('*', Match.stringLikeRegexp('AwsSolutions-.*'));
       expect(errors).toHaveLength(0);
     }

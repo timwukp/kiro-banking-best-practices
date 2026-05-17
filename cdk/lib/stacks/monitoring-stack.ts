@@ -7,6 +7,8 @@ import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as cloudwatch_actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as guardduty from 'aws-cdk-lib/aws-guardduty';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as events_targets from 'aws-cdk-lib/aws-events-targets';
 import { Construct } from 'constructs';
 import { KiroBankingConfig } from '../../config/environments';
 import { NagSuppressions } from 'cdk-nag';
@@ -46,6 +48,7 @@ export class MonitoringStack extends cdk.Stack {
       displayName: 'Kiro Banking Security Alerts',
       masterKey: kmsKey,
     });
+    // NOTE: Subscriptions (email, Lambda, chatbot) are managed externally per organization requirements
 
     // --- S3 Bucket: CloudTrail Audit Logs ---
     const accessLogBucket = new s3.Bucket(this, 'AccessLogBucket', {
@@ -206,6 +209,17 @@ export class MonitoringStack extends cdk.Stack {
       enable: true,
       findingPublishingFrequency: 'FIFTEEN_MINUTES',
     });
+
+    // Route GuardDuty findings to the SNS security topic via EventBridge
+    const guardDutyRule = new events.Rule(this, 'GuardDutyFindingsRule', {
+      ruleName: `kiro-banking-guardduty-findings-${config.environment}`,
+      description: 'Route GuardDuty findings to SNS security alerts topic',
+      eventPattern: {
+        source: ['aws.guardduty'],
+        detailType: ['GuardDuty Finding'],
+      },
+    });
+    guardDutyRule.addTarget(new events_targets.SnsTopic(this.securityTopic));
 
     // --- Outputs ---
     new cdk.CfnOutput(this, 'AuditLogBucketName', {
