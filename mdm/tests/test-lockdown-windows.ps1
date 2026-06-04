@@ -6,15 +6,16 @@ $pass = 0; $fail = 0
 function Ok($m){ Write-Output "  PASS: $m"; $script:pass++ }
 function Ng($m){ Write-Output "  FAIL: $m"; $script:fail++ }
 
-$here = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)  # agent-hooks
+$mdm   = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)   # mdm
+$hooks = (Resolve-Path (Join-Path $mdm '..\agent-hooks')).Path                   # agent-hooks
 $w = Join-Path $env:TEMP ("kiro-win-" + [guid]::NewGuid().ToString('N').Substring(0,8))
-$env:KIRO_SRC = Join-Path $here ''
+$env:KIRO_SRC = $hooks
 $env:KIRO_DEST = Join-Path $w 'hooks'
-$env:KIRO_AGENT_SRC = Join-Path $here 'banking-secure.agent.json'
+$env:KIRO_AGENT_SRC = Join-Path $hooks 'banking-secure.agent.json'
 $env:KIRO_AGENT_DEST = Join-Path $w 'agents\banking-secure.json'
 
 try {
-  & (Join-Path $here 'mdm\lockdown-windows.ps1') | Out-Null
+  & (Join-Path $mdm 'lockdown-windows.ps1') | Out-Null
   $h = Join-Path $env:KIRO_DEST 'destructive-fs-guard.sh'
   if (Test-Path $h) { Ok 'lockdown deployed the hook' } else { Ng 'lockdown did NOT deploy the hook' }
 
@@ -29,7 +30,7 @@ try {
   icacls $h /remove:d 'BUILTIN\Users' | Out-Null
   Remove-Item -Force $h
   if (-not (Test-Path $h)) { Ok 'self-heal setup (deleted)' } else { Ng 'could not delete for self-heal setup' }
-  & (Join-Path $here 'mdm\lockdown-windows.ps1') | Out-Null
+  & (Join-Path $mdm 'lockdown-windows.ps1') | Out-Null
   if (Test-Path $h) { Ok 'self-heal restored the deleted hook' } else { Ng 'self-heal did NOT restore' }
 }
 finally {
