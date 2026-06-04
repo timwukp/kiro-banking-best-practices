@@ -18,7 +18,8 @@
   "hooks": {
     "preToolUse": [
       { "matcher": "*", "command": "/opt/kiro/hooks/pii-guard.sh", "timeout_ms": 5000 },
-      { "matcher": "shell", "command": "/opt/kiro/hooks/git-guard.sh", "timeout_ms": 5000 }
+      { "matcher": "shell", "command": "/opt/kiro/hooks/git-guard.sh", "timeout_ms": 5000 },
+      { "matcher": "shell", "command": "/opt/kiro/hooks/destructive-fs-guard.sh", "timeout_ms": 5000 }
     ],
     "postToolUse": [
       { "command": "/opt/kiro/hooks/audit-logger.sh", "timeout_ms": 5000 }

@@ -11,6 +11,7 @@ MAS-compliant best practices for deploying **AWS Kiro** in Singapore **banking**
 |-----------------|------------|
 | Lock down the Kiro CLI agent (tool permissions, hooks, OS file lockdown) — **enforced config security** | `kiro-docs/agent-runtime-governance.md` ← start here |
 | Enterprise / registry governance (MCP allow-list, models, web tools, subagents) | `kiro-docs/security-governance-features.md` |
+| Make controls immutable / self-healing across clients (MDM, all OSes) | `kiro-docs/mdm-endpoint-enforcement.md` |
 | Secure the MCP config file (`mcp.json`) | `kiro-docs/mcp-security.md` |
 | Auth, network & VDI (Sections 1–4) | `Kiro-Agentic-SDLC-Banking-Best-Practices.md` |
 | MCP, SDLC, PDPA, FEAT (Sections 5–14) | `Kiro-Banking-Best-Practices-Part2.md` |

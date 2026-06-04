@@ -24,6 +24,13 @@ ev preToolUse shell '{"command":"git reset --hard HEAD~3"}'      | bash "$HERE/g
 ev preToolUse shell '{"command":"git push origin feature/x"}'    | bash "$HERE/git-guard.sh" 2>/dev/null && ok "allows feature-branch push"  || ng "false positive on feature push"
 ev preToolUse shell '{"command":"git status"}'                   | bash "$HERE/git-guard.sh" 2>/dev/null && ok "allows git status"           || ng "false positive on git status"
 
+echo "== destructive-fs-guard =="
+ev preToolUse shell '{"command":"rm -rf /"}'           | bash "$HERE/destructive-fs-guard.sh" 2>/dev/null && ng "should block rm -rf /"       || ok "blocks rm -rf /"
+ev preToolUse shell '{"command":"rm -rf .git"}'        | bash "$HERE/destructive-fs-guard.sh" 2>/dev/null && ng "should block rm -rf .git"    || ok "blocks rm -rf .git"
+ev preToolUse shell '{"command":"find . -delete"}'     | bash "$HERE/destructive-fs-guard.sh" 2>/dev/null && ng "should block find -delete"   || ok "blocks find -delete"
+ev preToolUse shell '{"command":"rm -rf ./build"}'     | bash "$HERE/destructive-fs-guard.sh" 2>/dev/null && ok "allows scoped rm -rf ./build" || ng "false positive on ./build"
+ev preToolUse shell '{"command":"rm report.txt"}'      | bash "$HERE/destructive-fs-guard.sh" 2>/dev/null && ok "allows single-file rm"        || ng "false positive on single-file rm"
+
 echo "== audit-logger =="
 TMPLOG="$(mktemp)"; TMPSTATE="$(mktemp)"
 export KIRO_AUDIT_LOG="$TMPLOG" KIRO_AUDIT_STATE="$TMPSTATE" KIRO_SESSION_ID="test-session"

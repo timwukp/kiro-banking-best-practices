@@ -34,6 +34,9 @@ mandates for `mcp.json`:
 
 Without this OS-layer control, the runtime controls below are advisory only.
 
+> For central, cross-OS (Windows/macOS/Linux/VDI), immutable and **self-healing**
+> enforcement via an MDM control plane, see `kiro-docs/mdm-endpoint-enforcement.md`.
+
 ## Control mapping
 
 | # | Control | Kiro mechanism | Stops | MAS TRM |
