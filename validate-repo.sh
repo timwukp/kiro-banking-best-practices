@@ -21,7 +21,7 @@ required_files=(
     ".gitignore"
     "LICENSE"
     "README.md"
-    "README-Kiro-Banking-Best-Practices.md"
+    "QUICK-REFERENCE.md"
     "Kiro-Agentic-SDLC-Banking-Best-Practices.md"
     "Kiro-Banking-Best-Practices-Part2.md"
     "Banking-Skills-Development-Guide.md"

@@ -107,7 +107,7 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 
 | Document | Description | Status |
 |----------|-------------|--------|
-| **[README-Kiro-Banking-Best-Practices.md](README-Kiro-Banking-Best-Practices.md)** | Quick reference card with checklists | ✅ Complete |
+| **[QUICK-REFERENCE.md](QUICK-REFERENCE.md)** | Quick reference card with checklists | ✅ Complete |
 | **[Kiro-Agentic-SDLC-Banking-Best-Practices.md](Kiro-Agentic-SDLC-Banking-Best-Practices.md)** | Comprehensive implementation guide (Sections 1-4) | ✅ Complete |
 | **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-14) incl. PDPA, Outsourcing, AI/ML, ABS | ✅ Complete |
 | **[Banking-Skills-Development-Guide.md](Banking-Skills-Development-Guide.md)** | How to build MAS-compliant Kiro Skills for banking | ✅ Complete |
@@ -245,7 +245,7 @@ Week 5-6: Monitoring & Compliance
 1. **Read the Overview**
    ```bash
    # Start with the comprehensive overview
-   open README-Kiro-Banking-Best-Practices.md
+   open QUICK-REFERENCE.md
    ```
 
 2. **Review Architecture**
