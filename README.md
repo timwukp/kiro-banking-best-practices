@@ -12,6 +12,7 @@
 ## 📋 Table of Contents
 
 - [Overview](#overview)
+- [Start Here](#start-here)
 - [Key Features](#key-features)
 - [Documentation Structure](#documentation-structure)
 - [Quick Start](#quick-start)
@@ -41,6 +42,27 @@ Financial institutions face unique challenges when adopting AI development tools
 - **Network Security** - Private connectivity without internet exposure
 
 This guide addresses all these challenges with practical, tested implementations.
+
+---
+
+## Start Here
+
+New here? Use the map below to jump straight to what you need. **AI agents:** see [`AGENTS.md`](AGENTS.md) for the machine-oriented version (auto-loaded by Kiro's default agent).
+
+| I want to… | Go to |
+|------------|-------|
+| Get running in ~15 minutes (Kiro CLI) | [Quick Start → First 15 minutes](#quick-start) |
+| Lock down the Kiro CLI agent (tool permissions, hooks, file lockdown) — **enforced config security** | [`kiro-docs/agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) |
+| Apply enterprise/registry governance (MCP allow-list, models, web tools, subagents) | [`kiro-docs/security-governance-features.md`](kiro-docs/security-governance-features.md) |
+| Secure the MCP config file (`mcp.json`) | [`kiro-docs/mcp-security.md`](kiro-docs/mcp-security.md) |
+| Set up auth, network & VDI (Sections 1–4) | [`Kiro-Agentic-SDLC-Banking-Best-Practices.md`](Kiro-Agentic-SDLC-Banking-Best-Practices.md) |
+| Go deeper: MCP, SDLC, PDPA, FEAT (Sections 5–14) | [`Kiro-Banking-Best-Practices-Part2.md`](Kiro-Banking-Best-Practices-Part2.md) |
+| Build a MAS-compliant Kiro Skill | [`Banking-Skills-Development-Guide.md`](Banking-Skills-Development-Guide.md) |
+| Use the reference locked-down agent + hooks | [`agent-hooks/`](agent-hooks/) |
+| Deploy the AWS infrastructure | [`cdk/`](cdk/) |
+| Check MAS TRM coverage | [Compliance Framework](#compliance-framework) |
+
+> **Enforced config-level security** lives mainly in [`agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) (CLI agent runtime); add the enterprise/registry layer from [`security-governance-features.md`](kiro-docs/security-governance-features.md). Everything under `.kiro/steering/` and `.kiro/skills/` is **guidance**, not an enforced boundary.
 
 ---
 
@@ -151,6 +173,27 @@ Local snapshots of Kiro platform documentation for offline/air-gapped environmen
 ---
 
 ## Quick Start
+
+### First 15 minutes (Kiro CLI)
+
+Fast path for first-time users (full prerequisites are below).
+
+```bash
+# 1. Install Kiro CLI — see https://kiro.dev/docs/cli/
+
+# 2. Clone and enter the repo
+git clone https://github.com/timwukp/kiro-banking-best-practices.git
+cd kiro-banking-best-practices
+
+# 3. Validate the reference locked-down agent
+kiro-cli agent validate --path agent-hooks/banking-secure.agent.json
+
+# 4. Run the repo + hook checks
+./validate-repo.sh                       # expect: RESULT: PASSED
+bash agent-hooks/tests/run-tests.sh      # expect: FAIL=0
+```
+
+**Next:** read [`kiro-docs/agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) to deploy the hooks and set `banking-secure` as your default agent, then [Security Architecture](#security-architecture).
 
 ### Prerequisites
 
@@ -264,6 +307,8 @@ Both architectures share the same 5-layer security model:
 3. **Endpoint Layer** - WorkSpaces VDI + DLP + GPO
 4. **Application Layer** - MCP Governance + Centralized Configuration + [Agent Runtime Governance](kiro-docs/agent-runtime-governance.md)
 5. **Audit Layer** - CloudTrail + CloudWatch + Compliance Validation (incl. agent tool-use audit log via `postToolUse` hook)
+
+> **Where to configure enforced security:** start with [`kiro-docs/agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) (Layer 4 runtime controls — tool permissions, hooks, OS-level file lockdown); see [`kiro-docs/security-governance-features.md`](kiro-docs/security-governance-features.md) for the enterprise/registry governance layer.
 
 ---
 

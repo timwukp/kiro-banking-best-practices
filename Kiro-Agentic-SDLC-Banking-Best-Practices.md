@@ -1,6 +1,8 @@
 # AWS Kiro Agentic Code in SDLC Best Practices for Banking Developers
 ## Singapore MAS-Compliant Secure Development Framework
 
+> **Audience:** security architects, banking developers, cloud ops · **Purpose:** Sections 1–4 — authentication, network isolation, and VDI for a MAS-compliant Kiro deployment · **Prerequisites:** AWS Organization + enterprise IdP · ↩ [README](README.md)
+
 **Version:** 1.0  
 **Date:** February 2026  
 **Target Audience:** Banking Development Teams in Singapore  

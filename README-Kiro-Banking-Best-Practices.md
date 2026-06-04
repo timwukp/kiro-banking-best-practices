@@ -1,5 +1,7 @@
 # Quick Reference Card: AWS Kiro Banking Best Practices
 
+> **Audience:** everyone · **Purpose:** one-page checklist / quick reference · **Prerequisites:** none.
+
 > For the full guide with architecture diagrams and detailed implementation steps, see [README.md](README.md).
 
 ---
