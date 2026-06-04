@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.7] - 2026-06-04
+
+### Added
+- **Agent Runtime Governance** (Layer 4): `kiro-docs/agent-runtime-governance.md` + `agent-hooks/` reference hooks (`pii-guard`, `git-guard`, hash-chained `audit-logger`) and locked-down `banking-secure.agent.json` (#11, #12)
+- Consolidated Kiro Security & Governance features reference `kiro-docs/security-governance-features.md` (#4, #7)
+- `AGENTS.md`, steering map (`.kiro/steering/repo-map.md`), README "Start Here" + 15-minute quickstart for first-time Kiro users (#13, #14)
+
+### Changed
+- Renamed `README-Kiro-Banking-Best-Practices.md` to `QUICK-REFERENCE.md` (#16)
+- Redirected `CLAUDE.md` to `AGENTS.md` — repo targets Kiro (#15)
+- Aligned `CONTRIBUTING.md` `.kiro` commit policy: skills + steering committed; specs/hooks/settings ignored (#10)
+
+### Fixed
+- CI: `Validate Documentation` (allow tracked `.kiro/steering`; scope secret scan) and `Validate CDK` (lockfile sync + AZ context cache) now pass on `main` (#8, #9)
+
+---
+
+## [1.6] - 2026-03-11
+
+### Added
+- Architecture diagrams (PNG), `SECURITY.md`, steering samples, kiro-docs source/freshness tracking
+
+### Changed
+- README consolidation
+
+---
+
+## [1.5] - 2026-03-11
+
+### Added
+- Option B: Direct IdP federation architecture (Okta / Entra ID, no IAM Identity Center)
+
+### Fixed
+- CDK compilation and tests
+
+---
+
 ## [1.4] - 2026-02-28
 
 ### Added

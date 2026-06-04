@@ -135,6 +135,7 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 |------|-------------|
 | **[.kiro/steering/banking-standards.md](.kiro/steering/banking-standards.md)** | Security requirements, prohibited patterns, data handling rules |
 | **[.kiro/steering/fairness.md](.kiro/steering/fairness.md)** | MAS FEAT principles for bias prevention in financial logic |
+| **[.kiro/steering/repo-map.md](.kiro/steering/repo-map.md)** | Repository navigation map for agents (always-included steering) |
 
 ### CI/CD Automation
 
@@ -468,9 +469,10 @@ For questions, issues, or feedback:
 | 1.4 | 2026-02-28 | Working Kiro Skills (3 skills) + GitHub Actions CI/CD |
 | 1.5 | 2026-03-11 | Add Option B: Direct IdP federation architecture (no IAM IDC), fix CDK compilation and tests |
 | 1.6 | 2026-03-11 | Architecture diagrams (PNG), SECURITY.md, steering samples, README consolidation, kiro-docs tracking |
+| 1.7 | 2026-06-04 | Agent Runtime Governance (Layer 4 hooks/agent/audit), security-governance-features reference, CI fixes, AGENTS.md + Kiro-targeting refactor + steering map, QUICK-REFERENCE rename |
 
 ---
 
-**Version:** 1.6
-**Last Updated:** March 11, 2026
+**Version:** 1.7
+**Last Updated:** June 4, 2026
 **Maintained By:** Security Architecture Team
