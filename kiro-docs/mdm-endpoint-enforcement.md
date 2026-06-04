@@ -47,7 +47,7 @@ MDM platform (Intune / Jamf Pro / Workspace ONE / Kandji)
 
 ## Reference implementation (Linux)
 
-- `agent-hooks/mdm/lockdown-linux.sh` — idempotent: deploys the canonical hooks + locked
+- `mdm/lockdown-linux.sh` — idempotent: deploys the canonical hooks + locked
   agent to a root-owned path, sets `chattr +i` (immutable) on them and `chattr +a`
   (append-only) on the audit log. **Re-running it restores and re-locks** anything that was
   removed or edited — schedule it via the MDM agent / cron / a `systemd` timer for
@@ -59,9 +59,9 @@ MDM platform (Intune / Jamf Pro / Workspace ONE / Kandji)
 The Windows (`icacls` + Intune) and macOS (`chflags schg` + Jamf) equivalents follow the
 same deploy-then-immutabilize + self-heal pattern. Per-OS reference scripts:
 
-- Linux/VDI: `agent-hooks/mdm/lockdown-linux.sh` (`chattr +i` immutable, `chattr +a` append-only).
-- macOS: `agent-hooks/mdm/lockdown-macos.sh` (`chflags schg`/`sappnd` as root; `uchg`/`uappnd` otherwise).
-- Windows: `agent-hooks/mdm/lockdown-windows.ps1` (`icacls`: grant Users Read+Execute, **deny** Delete/Write).
+- Linux/VDI: `mdm/lockdown-linux.sh` (`chattr +i` immutable, `chattr +a` append-only).
+- macOS: `mdm/lockdown-macos.sh` (`chflags schg`/`sappnd` as root; `uchg`/`uappnd` otherwise).
+- Windows: `mdm/lockdown-windows.ps1` (`icacls`: grant Users Read+Execute, **deny** Delete/Write).
 
 **Windows hooks:** the bash guard hooks run on Linux/macOS; a Windows Kiro client uses
 PowerShell hook equivalents — PowerShell ports of the guards are a documented follow-up.
@@ -93,12 +93,12 @@ CLI does not natively provide. Document this so the controls are not mistaken fo
 
 OS-enforcement tests (not part of CI — they need root/admin + filesystem-attribute support):
 
-- **Linux** — `agent-hooks/tests/test-lockdown.sh` (`chattr`): immutability blocks
+- **Linux** — `mdm/tests/test-lockdown.sh` (`chattr`): immutability blocks
   modify+delete, append-only blocks truncation, self-heal restores, destructive-fs-guard
   blocks. Verified on **Amazon Linux 2023** (root via SSM).
-- **macOS** — `agent-hooks/tests/test-lockdown-macos.sh` (`chflags`): same checks; uses
+- **macOS** — `mdm/tests/test-lockdown-macos.sh` (`chflags`): same checks; uses
   user-immutable `uchg` so it runs without root. Verified on **macOS (Darwin)**.
-- **Windows** — `agent-hooks/tests/test-lockdown-windows.ps1` (`icacls`): asserts the
+- **Windows** — `mdm/tests/test-lockdown-windows.ps1` (`icacls`): asserts the
   BUILTIN\Users **deny Delete/Write** ACE is applied and that self-heal restores. Verified
   on **Windows Server 2022** (SYSTEM via SSM).
 

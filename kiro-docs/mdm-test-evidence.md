@@ -1,6 +1,6 @@
 # MDM Endpoint Enforcement — Test Evidence
 
-Reproducible results for the cross-platform lockdown (`agent-hooks/mdm/`) and the agent
+Reproducible results for the cross-platform lockdown (`mdm/`) and the agent
 hooks (`agent-hooks/`). See `kiro-docs/mdm-endpoint-enforcement.md` for the controls.
 
 > **Sanitized:** environment identifiers (EC2 instance IDs, account IDs, IP addresses,
@@ -88,9 +88,9 @@ RESULT: PASS=7 FAIL=0
 bash agent-hooks/tests/run-tests.sh
 
 # OS lockdown (need root/admin + filesystem attribute support; not run in CI)
-sudo bash agent-hooks/tests/test-lockdown.sh            # Linux
-bash agent-hooks/tests/test-lockdown-macos.sh           # macOS (uchg, no root)
-powershell -ExecutionPolicy Bypass -File agent-hooks/tests/test-lockdown-windows.ps1   # Windows (admin)
+sudo bash mdm/tests/test-lockdown.sh            # Linux
+bash mdm/tests/test-lockdown-macos.sh           # macOS (uchg, no root)
+powershell -ExecutionPolicy Bypass -File mdm/tests/test-lockdown-windows.ps1   # Windows (admin)
 ```
 
 > CI (`validate-docs`/`validate-cdk`/`validate-skills`) runs the pure-bash hook subset; the
