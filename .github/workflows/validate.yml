@@ -40,10 +40,10 @@ jobs:
             exit 1
           fi
 
-      - name: Check no .kiro config tracked (skills are allowed)
+      - name: Check no .kiro config tracked (skills and steering samples are allowed)
         run: |
-          if git ls-files | grep -E '\.kiro/(steering|specs|hooks|settings)/'; then
-            echo "::error::.kiro config files found in git tracking (steering/specs/hooks/settings should be gitignored)"
+          if git ls-files | grep -E '\.kiro/(specs|hooks|settings)/'; then
+            echo "::error::.kiro config files found in git tracking (specs/hooks/settings should be gitignored)"
             exit 1
           fi
 
@@ -56,7 +56,9 @@ jobs:
             ERRORS=$((ERRORS + 1))
           fi
           # Private keys
-          if grep -r -l 'BEGIN.*PRIVATE KEY' --include='*.md' --include='*.ts' --include='*.pem' .; then
+          # Private keys (exclude the pii-detection skill, which documents the detection signature itself)
+          if grep -r -l 'BEGIN.*PRIVATE KEY' --include='*.md' --include='*.ts' --include='*.pem' . \
+             | grep -v '.kiro/skills/pii-detection/'; then
             echo "::error::Private key material detected"
             ERRORS=$((ERRORS + 1))
           fi
