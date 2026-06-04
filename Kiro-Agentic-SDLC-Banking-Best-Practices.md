@@ -44,44 +44,44 @@ This document provides comprehensive best practices for Singapore banking develo
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Enterprise IdP (SSO)                      │
-│              (SAML 2.0 / SCIM Integration)                   │
+│                    Enterprise IdP (SSO)                     │
+│                (SAML 2.0 / SCIM Integration)                │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              AWS IAM Identity Center (IDC)                   │
-│         (Centralized Access Management)                      │
+│                AWS IAM Identity Center (IDC)                │
+│               (Centralized Access Management)               │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  Corporate VPC                               │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │         Amazon WorkSpaces (VDI)                       │  │
-│  │  ┌────────────────────────────────────────────────┐  │  │
-│  │  │  Developer Desktop Environment                  │  │  │
-│  │  │  - Kiro CLI/IDE Installed                      │  │  │
-│  │  │  - DLP Agent Running                           │  │  │
-│  │  │  - Centralized MCP Configuration               │  │  │
-│  │  │  - No Local Admin Rights                       │  │  │
-│  │  └────────────────────────────────────────────────┘  │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                     │                                        │
-│                     │ (VPC Endpoint - AWS PrivateLink)       │
-│                     ▼                                        │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │         VPC Interface Endpoints                       │  │
-│  │  - com.amazonaws.region.q                           │  │
-│  │  - com.amazonaws.region.codewhisperer               │  │
-│  │  - com.amazonaws.region.bedrock                     │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+│                        Corporate VPC                        │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                Amazon WorkSpaces (VDI)                │  │
+│  │  ┌─────────────────────────────────────────────────┐  │  │
+│  │  │          Developer Desktop Environment          │  │  │
+│  │  │  - Kiro CLI/IDE Installed                       │  │  │
+│  │  │  - DLP Agent Running                            │  │  │
+│  │  │  - Centralized MCP Configuration                │  │  │
+│  │  │  - No Local Admin Rights                        │  │  │
+│  │  └─────────────────────────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                    │                                        │
+│                    │ (VPC Endpoint - AWS PrivateLink)       │
+│                    ▼                                        │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                VPC Interface Endpoints                │  │
+│  │  - com.amazonaws.region.q                             │  │
+│  │  - com.amazonaws.region.codewhisperer                 │  │
+│  │  - com.amazonaws.region.bedrock                       │  │
+│  └───────────────────────────────────────────────────────┘  │
+└────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              AWS Kiro Service (Private)                      │
-│         (No Internet Exposure Required)                      │
+│                 AWS Kiro Service (Private)                  │
+│               (No Internet Exposure Required)               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
