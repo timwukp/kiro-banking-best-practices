@@ -1,6 +1,8 @@
 # Building Kiro Skills for Banking Developers
 ## MAS Compliance & Singapore Banking Best Practices
 
+> **Audience:** developers building Kiro Skills · **Purpose:** build MAS-compliant banking Skills (with working examples in `.kiro/skills/`) · **Prerequisites:** basic familiarity with Kiro Skills · ↩ [README](README.md)
+
 ---
 
 ## 1. Overview: Skills for Banking
