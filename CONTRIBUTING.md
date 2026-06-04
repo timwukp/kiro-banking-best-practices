@@ -8,10 +8,11 @@ This repository contains best practices documentation for AWS Kiro in banking en
 - Markdown documentation files (*.md)
 - Code examples and configuration samples
 - Architecture diagrams (text/ASCII format)
+- `.kiro/skills/` and `.kiro/steering/` sample configuration (intentional, documented in the README)
 
 ### What NOT to Include
 - PDF files (regulatory documents)
-- `.kiro/` folder (local configuration)
+- `.kiro/specs/`, `.kiro/hooks/`, `.kiro/settings/` (local Kiro configuration)
 - Any personally identifiable information (PII)
 - Customer names, email addresses, or contact information
 - Proprietary or confidential information
