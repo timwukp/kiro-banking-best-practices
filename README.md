@@ -112,6 +112,8 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 | **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-14) incl. PDPA, Outsourcing, AI/ML, ABS | ✅ Complete |
 | **[Banking-Skills-Development-Guide.md](Banking-Skills-Development-Guide.md)** | How to build MAS-compliant Kiro Skills for banking | ✅ Complete |
 | **[kiro-docs/agent-runtime-governance.md](kiro-docs/agent-runtime-governance.md)** | Agent runtime governance: tool permissions, hooks, tamper-evident audit | ✅ Complete |
+| **[kiro-docs/mdm-endpoint-enforcement.md](kiro-docs/mdm-endpoint-enforcement.md)** | MDM-managed, immutable, self-healing global hooks/steering/agent across clients | ✅ Complete |
+| **[kiro-docs/mdm-test-evidence.md](kiro-docs/mdm-test-evidence.md)** | Sanitized Windows/macOS/Linux lockdown test results | ✅ Complete |
 | **[SECURITY.md](SECURITY.md)** | Security vulnerability reporting policy | ✅ Complete |
 
 ### Kiro Skills (Working Implementations)

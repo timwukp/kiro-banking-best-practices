@@ -17,6 +17,8 @@ These files are local copies of Kiro platform documentation, included for offlin
 | [anthropic-skills-reference.md](anthropic-skills-reference.md) | https://github.com/anthropics/skills | 2026-02-25 |
 | [security-governance-features.md](security-governance-features.md) † | https://kiro.dev/changelog/ + https://kiro.dev/changelog/cli/ | 2026-06-04 |
 | [agent-runtime-governance.md](agent-runtime-governance.md) ‡ | Original authored guidance (this repo) | 2026-06-04 |
+| [mdm-endpoint-enforcement.md](mdm-endpoint-enforcement.md) ‡ | Original authored guidance (this repo) | 2026-06-04 |
+| [mdm-test-evidence.md](mdm-test-evidence.md) ‡ | Original authored guidance (this repo) | 2026-06-04 |
 
 † Compiled, banking-focused reference synthesized from the changelogs — not a verbatim snapshot of a single page.
 ‡ Original guidance authored for this repo (Layer 4 agent runtime governance) — not a snapshot of an external page.
