@@ -8,6 +8,8 @@ MAS-compliant Kiro deployment.
 
 > **Last reviewed:** 2026-06-04. Verify current behaviour against
 > https://kiro.dev/changelog/ before relying on any single item.
+> Scope: security/governance-relevant changes only — productivity/UX-only
+> releases (e.g. CLI 2.2/2.4, IDE 0.12) are intentionally not itemised.
 
 ---
 
@@ -20,6 +22,7 @@ Enterprise (console, account, compliance).
 
 | Date | Surface | Version | Feature |
 |------|---------|---------|---------|
+| 2026-05-29 | CLI | 2.5.0 | Subagent Review Loops (self-correcting pipelines) + Display/Accessibility settings |
 | 2026-05-27 | Gen | — | `User_Email` column in daily user activity reports (S3 CSV) |
 | 2026-04-24 | Gen | — | Per-model message counts in user activity reports |
 | 2026-04-13 | Gen | — | User emails shown in Kiro console (IAM Identity Center) |
@@ -46,7 +49,9 @@ Enterprise (console, account, compliance).
 | Date | Surface | Version | Feature |
 |------|---------|---------|---------|
 | 2026-05-12 | CLI | 2.3.0 | OAuth Client ID for MCP servers (`oauth.clientId`) |
+| 2026-04-24 | CLI | 2.1 | Tool Search — on-demand MCP tool loading (context-window hygiene) |
 | 2026-03-02 | CLI | 1.27 | Granular Tool Trust — tiered scopes for shell commands & file paths |
+| 2026-02-18 | IDE | 0.10 | MCP Prompts / Resource Templates / Elicitation (controlled context injection) |
 | 2026-02-05 | IDE | 0.9 | Pre/Post Tool Use Hooks — Pre hooks can *block* tools before execution |
 | 2026-01-16 | CLI | 1.24.0 | Granular URL permissions for `web_fetch` (regex allow/block) |
 | 2025-09-04 | IDE | 0.2.38 | Enhanced dangerous-shell-command detection (manual review required) |
