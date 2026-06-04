@@ -139,6 +139,7 @@ Local snapshots of Kiro platform documentation for offline/air-gapped environmen
 | **[kiro-docs/mcp-servers.md](kiro-docs/mcp-servers.md)** | Available MCP servers reference |
 | **[kiro-docs/mcp-usage.md](kiro-docs/mcp-usage.md)** | MCP usage patterns and examples |
 | **[kiro-docs/privacy-and-security.md](kiro-docs/privacy-and-security.md)** | Privacy and security guidelines |
+| **[kiro-docs/security-governance-features.md](kiro-docs/security-governance-features.md)** | Consolidated Kiro security & governance feature reference (CLI + IDE/General), mapped to MAS TRM |
 
 ### Regulatory Frameworks
 
