@@ -1,0 +1,28 @@
+{
+  "name": "banking-secure",
+  "description": "MAS-compliant locked-down Kiro agent for banking SDLC. Least-privilege tools, path/command deny rules, and fail-safe PII/git/audit hooks.",
+  "tools": ["read", "write", "shell", "code", "grep", "glob"],
+  "allowedTools": ["read", "grep", "glob", "code"],
+  "toolsSettings": {
+    "write": {
+      "allowedPaths": ["./src/**", "./tests/**", "./docs/**"],
+      "deniedPaths": ["./.env", "**/.env", "**/secrets/**", "~/.aws/**", "~/.ssh/**"]
+    },
+    "shell": {
+      "allowedCommands": ["git status", "git diff", "git add .*", "git commit .*", "npm test", "npm run build"],
+      "deniedCommands": ["rm -rf .*", "sudo .*", "curl .*", "wget .*", "git push .*--force.*", "git reset --hard.*", "aws iam .*", "aws sts .*", "aws secretsmanager .*"],
+      "autoAllowReadonly": true,
+      "denyByDefault": false
+    }
+  },
+  "hooks": {
+    "preToolUse": [
+      { "matcher": "*", "command": "/opt/kiro/hooks/pii-guard.sh", "timeout_ms": 5000 },
+      { "matcher": "shell", "command": "/opt/kiro/hooks/git-guard.sh", "timeout_ms": 5000 }
+    ],
+    "postToolUse": [
+      { "command": "/opt/kiro/hooks/audit-logger.sh", "timeout_ms": 5000 }
+    ]
+  },
+  "resources": ["file://.kiro/steering/**/*.md"]
+}

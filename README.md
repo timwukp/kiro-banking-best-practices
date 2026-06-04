@@ -89,6 +89,7 @@ This guide addresses all these challenges with practical, tested implementations
 | **[Kiro-Agentic-SDLC-Banking-Best-Practices.md](Kiro-Agentic-SDLC-Banking-Best-Practices.md)** | Comprehensive implementation guide (Sections 1-4) | ✅ Complete |
 | **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-14) incl. PDPA, Outsourcing, AI/ML, ABS | ✅ Complete |
 | **[Banking-Skills-Development-Guide.md](Banking-Skills-Development-Guide.md)** | How to build MAS-compliant Kiro Skills for banking | ✅ Complete |
+| **[kiro-docs/agent-runtime-governance.md](kiro-docs/agent-runtime-governance.md)** | Agent runtime governance: tool permissions, hooks, tamper-evident audit | ✅ Complete |
 | **[SECURITY.md](SECURITY.md)** | Security vulnerability reporting policy | ✅ Complete |
 
 ### Kiro Skills (Working Implementations)
@@ -261,8 +262,8 @@ Both architectures share the same 5-layer security model:
 1. **Identity Layer** - Enterprise IdP + MFA (via IAM Identity Center or direct federation)
 2. **Network Layer** - VPC + PrivateLink + Security Groups
 3. **Endpoint Layer** - WorkSpaces VDI + DLP + GPO
-4. **Application Layer** - MCP Governance + Centralized Configuration
-5. **Audit Layer** - CloudTrail + CloudWatch + Compliance Validation
+4. **Application Layer** - MCP Governance + Centralized Configuration + [Agent Runtime Governance](kiro-docs/agent-runtime-governance.md)
+5. **Audit Layer** - CloudTrail + CloudWatch + Compliance Validation (incl. agent tool-use audit log via `postToolUse` hook)
 
 ---
 
