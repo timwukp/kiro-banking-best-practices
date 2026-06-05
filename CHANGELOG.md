@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.8] - 2026-06-05
+
+### Added
+- **MDM / endpoint-managed enforcement** `kiro-docs/mdm-endpoint-enforcement.md` + cross-platform lockdown references `mdm/lockdown-{linux.sh,macos.sh,windows.ps1}` (immutable, append-only, self-healing) with tests; `destructive-fs-guard` hook (#22)
+- **Chaos / penetration test** `security-tests/chaos/` (non-privileged human + Kiro agent) + sanitized hash-chained evidence `kiro-docs/chaos-pentest-evidence.md`; round 2 closes 4/6 endpoint gaps with stronger local controls (#25, #26)
+- README **Key Features**: Agent Runtime Governance, Endpoint Enforcement (MDM) & Defense-in-Depth, Adversarial Validation (#27)
+
+### Changed
+- Relocated OS-level MDM enforcement out of `agent-hooks/` into top-level `mdm/` (layering: MDM is not a Kiro feature) (#24)
+- Hardening from chaos findings folded into best practices: declarative `denyByDefault` as the primary agent control; fixed/managed audit path; application allow-listing; server-side as the authoritative boundary
+
+---
+
 ## [1.7] - 2026-06-04
 
 ### Added

@@ -487,9 +487,10 @@ For questions, issues, or feedback:
 | 1.5 | 2026-03-11 | Add Option B: Direct IdP federation architecture (no IAM IDC), fix CDK compilation and tests |
 | 1.6 | 2026-03-11 | Architecture diagrams (PNG), SECURITY.md, steering samples, README consolidation, kiro-docs tracking |
 | 1.7 | 2026-06-04 | Agent Runtime Governance (Layer 4 hooks/agent/audit), security-governance-features reference, CI fixes, AGENTS.md + Kiro-targeting refactor + steering map, QUICK-REFERENCE rename |
+| 1.8 | 2026-06-05 | Agent runtime governance, MDM endpoint enforcement, chaos/pentest, Key Features update |
 
 ---
 
-**Version:** 1.7
-**Last Updated:** June 4, 2026
+**Version:** 1.8
+**Last Updated:** June 5, 2026
 **Maintained By:** Security Architecture Team
