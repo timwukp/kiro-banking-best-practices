@@ -99,6 +99,20 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 - Automated compliance validation scripts
 - MAS TRM Guidelines mapping
 
+### 🤖 Agent Runtime Governance
+- Locked default agent: least-privilege `tools`/`allowedTools`, `toolsSettings` deny rules (`denyByDefault`, denied paths/commands)
+- Fail-closed `preToolUse` hooks: PII/secret guard, git policy guard, destructive-filesystem guard
+- Tamper-evident (hash-chained) tool-use audit; declarative `denyByDefault` as the primary control
+
+### 🔒 Endpoint Enforcement (MDM) & Defense-in-Depth
+- Immutable, append-only, self-healing control files across Windows/macOS/Linux/VDI (`chattr`/`chflags`/`icacls` via MDM)
+- Application allow-listing + non-privileged developers; server-side branch protection / IAM as the authoritative boundary
+- Zero Trust: vendor "built-in" protections treated as unverifiable backstops, not the boundary
+
+### 🧪 Adversarial Validation
+- Chaos / penetration harness: non-privileged human and Kiro agent vs the controls
+- Reproducible, hash-chained, sanitized evidence (`kiro-docs/chaos-pentest-evidence.md`)
+
 ---
 
 ## Documentation Structure
