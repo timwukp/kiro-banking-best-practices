@@ -224,39 +224,31 @@ Before implementing Kiro in your banking environment, ensure you have:
 - ✅ DLP solution deployed (Symantec, McAfee, Microsoft Purview, or Forcepoint)
 - ✅ CloudTrail enabled for audit logging
 
-### Implementation Timeline
+### Implementation plan
 
-```
-Week 1-2: Identity & Access Management
-  └─ Configure Enterprise IdP integration with IAM Identity Center
-  └─ Enable SCIM provisioning for user synchronization
-  └─ Assign Kiro subscriptions to developer groups
-  └─ Block social login URLs at firewall level
+> **No fixed calendar.** Duration depends on your starting point and your organization's
+> approval / identity / change processes — not on the technical work, which is small and
+> largely automated. The estimates below are illustrative; validate them in your environment.
 
-Week 2-3: Network Security Architecture
-  └─ Create VPC Interface Endpoints for Kiro services
-  └─ Configure security groups and Network ACLs
-  └─ Enable Private DNS resolution
-  └─ Test connectivity from WorkSpaces
+**Assumptions that drive duration:** existing AWS Organization + enterprise IdP;
+identity-team availability for SCIM; security-team availability for MCP review; one starting
+region/account; your change-management cadence.
 
-Week 3-4: VDI Deployment
-  └─ Deploy Amazon WorkSpaces with encryption
-  └─ Apply Group Policy hardening
-  └─ Install and configure DLP agents
-  └─ Deploy centralized MCP configuration
+| Workstream | Prerequisite | Technical effort* | Exit criterion (objective evidence) |
+|------------|--------------|-------------------|-------------------------------------|
+| Identity & access (IdP + SCIM + MFA) | IdP admin, IAM Identity Center | ~0.5–1 d | Test user auto-provisioned via SCIM; MFA enforced; social / Builder ID blocked |
+| Network isolation (VPC endpoints, SG/NACL, private DNS) | VPC + subnets | ~0.5–1 d | `cdk synth` clean; VDI connectivity test passes; no public endpoint |
+| Secure VDI (WorkSpaces + GPO/DLP) | Directory service | ~1–2 d | Encrypted WorkSpace launches; protected paths / trusted commands enforced |
+| MCP governance | approved-server list | ~0.5 d | Registry allow-list active; `mcp.json` read-only to developer (permission check) |
+| Agent runtime + endpoint enforcement | golden image | ~0.5–1 d | `agent-hooks/tests/run-tests.sh` + `mdm/tests/test-lockdown.sh` green; chaos harness = 0 unexpected bypass |
+| Monitoring & compliance | CloudTrail / CloudWatch | ~0.5 d | Audit shipped off-box; test alarm fires; MAS TRM mapping reviewed |
 
-Week 4-5: MCP Governance
-  └─ Define approved MCP server whitelist
-  └─ Create centralized mcp.json configuration
-  └─ Implement file system permissions
-  └─ Test developer access restrictions
+\* Hands-on time assuming the prerequisite already exists.
 
-Week 5-6: Monitoring & Compliance
-  └─ Enable CloudTrail logging for Kiro activities
-  └─ Configure CloudWatch alarms
-  └─ Implement compliance validation scripts
-  └─ Conduct security audit and documentation review
-```
+> **The long pole is organizational, not technical.** Hands-on effort totals only a few days;
+> the calendar is set by IdP/SCIM coordination, MCP security reviews, and change approvals —
+> **days to weeks**, depending on your organization. Measure progress by the **exit criteria
+> above** (verifiable evidence), not by elapsed weeks.
 
 ### Getting Started
 
