@@ -123,6 +123,20 @@ git-guard blocks force-push + protected-branch push + `reset --hard` and allows
 `banking-secure.agent.json` is valid (plus `kiro-cli agent validate` when the binary is
 present). Verified on macOS (dev) and Amazon Linux (EC2).
 
+## Adversarial validation (chaos test)
+
+A non-privileged red-team harness (`security-tests/chaos/run-chaos.sh`) ran the agent and a
+plain-shell human against these controls (4 runs, no sudo): **15/15 expected blocks held, 0
+unexpected bypasses**. It also confirmed two limits that shape the design — full report in
+`kiro-docs/chaos-pentest-evidence.md`:
+
+- **Hooks cannot catch obfuscated payloads** (e.g. base64-encoded commands/PII). The
+  **primary** agent control is therefore the Kiro-core declarative `toolsSettings`
+  (`denyByDefault` allow-list + `deniedCommands`/`deniedPaths`); the guard hooks are
+  fail-closed defense-in-depth, not the boundary.
+- **An env-overridable audit path can be redirected** by the user. Pin the audit destination
+  to a managed path and ship it off-box (CloudWatch/SIEM) in near-real-time.
+
 ## MAS TRM mapping
 
 | MAS TRM | Covered by |

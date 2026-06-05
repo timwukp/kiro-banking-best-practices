@@ -114,6 +114,7 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 | **[kiro-docs/agent-runtime-governance.md](kiro-docs/agent-runtime-governance.md)** | Agent runtime governance: tool permissions, hooks, tamper-evident audit | ✅ Complete |
 | **[kiro-docs/mdm-endpoint-enforcement.md](kiro-docs/mdm-endpoint-enforcement.md)** | MDM-managed, immutable, self-healing global hooks/steering/agent across clients | ✅ Complete |
 | **[kiro-docs/mdm-test-evidence.md](kiro-docs/mdm-test-evidence.md)** | Sanitized Windows/macOS/Linux lockdown test results | ✅ Complete |
+| **[kiro-docs/chaos-pentest-evidence.md](kiro-docs/chaos-pentest-evidence.md)** | Chaos/pentest: non-privileged human + agent vs controls (findings + recommendations) | ✅ Complete |
 | **[SECURITY.md](SECURITY.md)** | Security vulnerability reporting policy | ✅ Complete |
 
 ### Kiro Skills (Working Implementations)
