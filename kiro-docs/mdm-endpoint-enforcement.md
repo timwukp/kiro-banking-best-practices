@@ -116,7 +116,11 @@ cleared, the append-only audit could not be truncated, the root-owned command gu
 be replaced, `sudo` failed, and root-owned "production" could not be deleted — **0 unexpected
 bypasses**. The expected limitation — invoking a binary by absolute path or shipping your own
 bypasses a `PATH` command guard — requires **application allow-listing** to fully close. Full
-report: `kiro-docs/chaos-pentest-evidence.md`.
+report: `kiro-docs/chaos-pentest-evidence.md`. A follow-up hardened run closed **4 of the 6**
+endpoint gaps locally (`noexec` application control, fixed/managed audit path, `denyByDefault`
+allow-list, least-privilege data access); the two residuals — force-push via an approved
+binary and obfuscated-content detection — are anchored **server-side** (branch protection) and
+via **DLP/egress + least-privilege**, respectively.
 
 ## MAS TRM mapping
 
