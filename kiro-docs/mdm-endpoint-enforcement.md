@@ -107,6 +107,17 @@ green on macOS and Linux (CI runs the pure-bash subset).
 
 Sanitized results for all three platforms: `kiro-docs/mdm-test-evidence.md`.
 
+## Adversarial validation (chaos test)
+
+A non-privileged red-team harness (`security-tests/chaos/run-chaos.sh`; 4 runs, no sudo)
+confirmed the OS-layer controls **hold against a human in a plain shell, not just the Kiro
+agent**: immutable hooks could not be modified or deleted, the immutable bit could not be
+cleared, the append-only audit could not be truncated, the root-owned command guard could not
+be replaced, `sudo` failed, and root-owned "production" could not be deleted — **0 unexpected
+bypasses**. The expected limitation — invoking a binary by absolute path or shipping your own
+bypasses a `PATH` command guard — requires **application allow-listing** to fully close. Full
+report: `kiro-docs/chaos-pentest-evidence.md`.
+
 ## MAS TRM mapping
 
 | MAS TRM | Covered by |

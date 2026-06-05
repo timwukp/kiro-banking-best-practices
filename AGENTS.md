@@ -17,6 +17,7 @@ MAS-compliant best practices for deploying **AWS Kiro** in Singapore **banking**
 | MCP, SDLC, PDPA, FEAT (Sections 5–14) | `Kiro-Banking-Best-Practices-Part2.md` |
 | Build a MAS-compliant Kiro Skill | `Banking-Skills-Development-Guide.md` |
 | Reference locked-down agent + hooks | `agent-hooks/banking-secure.agent.json`, `agent-hooks/*.sh` |
+| Red-team / validate the controls (chaos test) | `security-tests/chaos/run-chaos.sh`, `kiro-docs/chaos-pentest-evidence.md` |
 | Deploy infrastructure | `cdk/` (see `cdk/README.md`) |
 | MAS TRM mapping | `README.md` → "Compliance Framework" |
 
