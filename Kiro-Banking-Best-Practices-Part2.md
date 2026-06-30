@@ -188,23 +188,26 @@ aws q update-encryption-configuration \
   --kms-key-id arn:aws:kms:region:account:key/xxxxx
 ```
 
-### 7.2 Data Residency
+### 7.2 Data Location & Residency
 
-**Regional Configuration:**
-- **Primary Region:** ap-southeast-1 (Singapore)
-- **Cross-Region Inference:** Disabled for banking
-- **Data Storage:** Singapore region only
+> **⚠️ Data Location Note:** Kiro (Amazon Q Developer) profiles currently exist only in **us-east-1 (N. Virginia)** or **eu-central-1 (Frankfurt)** — there is **no** Singapore (`ap-southeast-1`) profile option. Your content, prompt logs, and user activity reports are stored in the profile region by architectural requirement. MAS TRM Guidelines do **not** impose a data localisation mandate — data residency in Singapore is a customer preference, not a regulatory requirement.
 
-**Kiro Admin Console Setting:**
-```json
-{
-  "dataResidency": {
-    "primaryRegion": "ap-southeast-1",
-    "allowCrossRegion": false,
-    "dataRetention": "90days"
-  }
-}
-```
+**Clarification: Data Residency vs. Regulatory Requirement**
+
+MAS TRM Guidelines focus on **data protection controls** (encryption, access control, audit trails) rather than prescribing where data must physically reside. Financial institutions may choose to keep data in Singapore for business, contractual, or risk-appetite reasons, but this is not a MAS-imposed localisation mandate.
+
+**Regional Reality for Kiro:**
+- **Profile / Service Region:** Kiro profiles are hosted in `us-east-1` or `eu-central-1` only. Content (including customizations) is stored in the profile region. There is no `ap-southeast-1` profile.
+- **Logging:** Prompt log and user activity report S3 buckets **must** reside in the AWS Region where the Kiro profile was installed. Cross-account buckets are not supported.
+- **Inference:** Kiro is powered by Amazon Bedrock and uses cross-region inference. Requests are kept within the AWS Regions of the profile's geography — a US profile stays within US Regions (us-east-1, us-west-2, us-east-2) and does **not** route to Singapore.
+- **Mitigation (if residency is preferred):** Use S3 Cross-Region Replication (CRR) to replicate the profile-region log bucket to `ap-southeast-1` for local access. This produces a regional **copy**; the authoritative log location remains the profile region.
+- **VPC / network:** Developer traffic can still use `ap-southeast-1` VPC endpoints / PrivateLink for network-layer isolation, but this is connectivity hygiene — it does not change where Kiro processes or stores data.
+
+**References:**
+- [AWS Docs: Cross-region processing in Amazon Q Developer](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/cross-region-processing.html)
+- [Kiro Docs: Viewing per-user activity](https://kiro.dev/docs/cli/enterprise/monitor-and-track/user-activity/)
+- [Amazon Q Developer European Region announcement (us-east-1 / eu-central-1)](https://aws.amazon.com/blogs/devops/amazon-q-developer-european-region/)
+- [Amazon S3 Cross-Region Replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html)
 
 ### 7.3 Opt-Out Configuration
 
