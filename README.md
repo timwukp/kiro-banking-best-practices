@@ -357,7 +357,7 @@ Both architectures share the same 5-layer security model:
 - ✅ **Least Privilege** - IAM policies grant minimum required permissions
 - ✅ **Encryption** - Data encrypted at rest (KMS) and in transit (TLS 1.2+)
 - ✅ **Audit Trails** - CloudTrail logging with 90-day minimum retention
-- ✅ **Data Residency** - All data processing within Singapore region (ap-southeast-1)
+- ✅ **Data Location Governance** - Kiro operates from supported profile regions (us-east-1, eu-central-1); prompt logs and user activity reports are stored in the profile region per AWS requirements. MAS TRM does not mandate data localisation — residency preferences are customer-driven. For organizations requiring regional log copies, S3 Cross-Region Replication (CRR) to ap-southeast-1 is available as a complementary control
 - ✅ **DLP Controls** - Prevent code exfiltration and credential exposure
 - ✅ **MCP Governance** - Centrally managed whitelist, no developer modifications
 - ✅ **PDPA Compliance** - Data classification, DLP rules for personal data, breach notification
