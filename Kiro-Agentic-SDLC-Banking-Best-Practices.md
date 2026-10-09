@@ -3,8 +3,8 @@
 
 > **Audience:** security architects, banking developers, cloud ops · **Purpose:** Sections 1–4 — authentication, network isolation, and VDI for a MAS-aligned Kiro deployment · **Prerequisites:** AWS Organization + enterprise IdP · ↩ [README](README.md)
 
-**Version:** 1.0  
-**Date:** February 2026  
+**Version:** 1.9  
+**Date:** October 2026  
 **Target Audience:** Banking Development Teams in Singapore  
 **Regulatory Frameworks:**
 - Monetary Authority of Singapore (MAS) Technology Risk Management (TRM) Guidelines (18 January 2021), which apply to all MAS-regulated financial institutions
@@ -29,16 +29,27 @@ This document provides comprehensive best practices for Singapore banking develo
 
 ## Table of Contents
 
+**Part 1 (this document)**
+
 1. [Architecture Overview](#1-architecture-overview)
 2. [Authentication & Identity Management](#2-authentication--identity-management)
 3. [Network Security Architecture](#3-network-security-architecture)
 4. [Virtual Desktop Infrastructure (VDI)](#4-virtual-desktop-infrastructure-vdi)
-5. [MCP Server Security & Governance](#5-mcp-server-security--governance)
-6. [SDLC Security Controls](#6-sdlc-security-controls)
-7. [Data Protection & Encryption](#7-data-protection--encryption)
-8. [Compliance & Audit](#8-compliance--audit)
-9. [Operational Best Practices](#9-operational-best-practices)
-10. [Incident Response](#10-incident-response)
+
+**Part 2 ([Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md))**
+
+5. [MCP Server Security & Governance](Kiro-Banking-Best-Practices-Part2.md#5-mcp-server-security--governance)
+6. [SDLC Security Controls](Kiro-Banking-Best-Practices-Part2.md#6-sdlc-security-controls)
+7. [Data Protection & Encryption](Kiro-Banking-Best-Practices-Part2.md#7-data-protection--encryption)
+8. [Compliance & Audit](Kiro-Banking-Best-Practices-Part2.md#8-compliance--audit)
+9. [Operational Best Practices](Kiro-Banking-Best-Practices-Part2.md#9-operational-best-practices)
+10. [Incident Response](Kiro-Banking-Best-Practices-Part2.md#10-incident-response)
+11. [Personal Data Protection Act (PDPA) Compliance](Kiro-Banking-Best-Practices-Part2.md#11-personal-data-protection-act-pdpa-compliance)
+12. [MAS Outsourcing and Third-Party Services](Kiro-Banking-Best-Practices-Part2.md#12-mas-outsourcing-and-third-party-services)
+13. [AI/ML Governance: MAS FEAT Principles and AI Risk Management Guidelines](Kiro-Banking-Best-Practices-Part2.md#13-aiml-governance-mas-feat-principles-and-ai-risk-management-guidelines)
+14. [Industry Standards: ABS Guidelines](Kiro-Banking-Best-Practices-Part2.md#14-industry-standards-abs-guidelines)
+
+Part 2 also contains Appendices A–C ([quick reference commands](Kiro-Banking-Best-Practices-Part2.md#appendix-a-quick-reference-commands), [compliance checklist](Kiro-Banking-Best-Practices-Part2.md#appendix-b-compliance-checklist), [troubleshooting](Kiro-Banking-Best-Practices-Part2.md#appendix-c-troubleshooting)).
 
 ---
 
@@ -1008,7 +1019,7 @@ The MCP registry and the other Kiro console settings are organization-wide, so c
 
 ---
 
-*[Document continues in next section...]*
+**Continue with [Part 2: Sections 5–14](Kiro-Banking-Best-Practices-Part2.md)** (MCP governance, SDLC controls, data protection, compliance and audit, operations, incident response, PDPA, outsourcing, AI governance and ABS standards).
 
 
 ---

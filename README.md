@@ -172,11 +172,14 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 
 ### Architecture Diagrams
 
+The diagrams are Mermaid blocks in this README, so they render on GitHub and are kept in sync with the text.
+
 | Diagram | Description |
 |---------|-------------|
-| **[diagrams/architecture-option-a.png](diagrams/architecture-option-a.png)** | Option A: Via IAM Identity Center |
-| **[diagrams/architecture-option-b.png](diagrams/architecture-option-b.png)** | Option B: Direct IdP Federation |
-| **[diagrams/security-layers.png](diagrams/security-layers.png)** | This guide's 5-layer security model |
+| **[Option A](#option-a-via-aws-iam-identity-center-default)** | Via IAM Identity Center |
+| **[Option B](#option-b-direct-idp-federation-no-iam-identity-center)** | Direct IdP Federation |
+| **[Security Layers](#security-layers)** | This guide's 5-layer security model |
+| **[diagrams/generate_diagrams.py](diagrams/generate_diagrams.py)** | Optional PNG export of the same three diagrams (Python `diagrams` package + Graphviz) |
 
 ### Technical Reference (Kiro Platform Docs)
 
@@ -304,7 +307,42 @@ This guide supports two architecture options depending on your organization's id
 
 Enterprise IdP federates through IAM Identity Center, which centrally manages access to both Kiro subscriptions and WorkSpaces. This is the traditional approach and provides unified access management across all AWS services.
 
-![Option A Architecture](diagrams/architecture-option-a.png)
+```mermaid
+flowchart TB
+    idp["Enterprise IdP<br>Entra ID or Okta, MFA"]
+    dev["Developer"]
+    subs["Kiro subscription<br>assigned in the Kiro console"]
+
+    subgraph idreg["Identity region, e.g. ap-southeast-1"]
+        idc["IAM Identity Center"]
+    end
+
+    subgraph wl["Workload account, ap-southeast-1"]
+        subgraph vpc["Private VPC: no public subnets, no inbound access"]
+            vdi["WorkSpaces VDI<br>Kiro IDE and CLI, DLP, GPO"]
+            policy["Admin policy<br>managed-settings.json on the VDI image"]
+            awsep["AWS service endpoints<br>logs, kms, sts, s3"]
+        end
+        egress["Allowlisted HTTPS egress<br>sign-in, downloads, Kiro APIs"]
+        mon["CloudTrail, CloudWatch,<br>GuardDuty, AWS Config"]
+    end
+
+    subgraph prof["Kiro profile region: us-east-1 or eu-central-1"]
+        kiro["Kiro service<br>stores and processes prompts and code context"]
+        plogs["S3: prompt logs and<br>user activity reports"]
+    end
+
+    idp -->|"SAML 2.0 + SCIM"| idc
+    idc -->|"users and groups"| subs
+    subs --> kiro
+    dev --> vdi
+    policy -.->|"enforced by the Kiro client"| vdi
+    vdi --> awsep
+    awsep --> mon
+    vdi --> egress
+    egress -->|"HTTPS 443"| kiro
+    kiro --> plogs
+```
 
 ### Option B: Direct IdP Federation (No IAM Identity Center)
 
@@ -312,7 +350,38 @@ Since [Kiro v0.9.40](https://kiro.dev/changelog/ide/external-identity-provider-s
 
 This option removes IAM Identity Center entirely, simplifying the architecture for organizations that prefer direct IdP integration.
 
-![Option B Architecture](diagrams/architecture-option-b.png)
+```mermaid
+flowchart TB
+    idp["Enterprise IdP<br>Okta or Entra ID, MFA"]
+    dev["Developer"]
+
+    subgraph wl["Workload account, ap-southeast-1"]
+        ds["AWS Directory Service<br>Managed AD, Simple AD or AD Connector"]
+        subgraph vpc["Private VPC: no public subnets, no inbound access"]
+            vdi["WorkSpaces VDI<br>Kiro IDE and CLI, DLP, GPO"]
+            policy["Admin policy<br>managed-settings.json, Option B file"]
+            awsep["AWS service endpoints<br>logs, kms, sts, s3"]
+        end
+        egress["Allowlisted HTTPS egress<br>IdP sign-in, downloads, Kiro APIs"]
+        mon["CloudTrail, CloudWatch,<br>GuardDuty, AWS Config"]
+    end
+
+    subgraph prof["Kiro profile region: us-east-1 or eu-central-1"]
+        kiro["Kiro service<br>stores and processes prompts and code context"]
+        plogs["S3: prompt logs and<br>user activity reports"]
+    end
+
+    idp -->|"OIDC + SCIM"| kiro
+    idp -->|"SAML 2.0"| vdi
+    ds -->|"WorkSpaces directory"| vdi
+    dev --> vdi
+    policy -.->|"enforced by the Kiro client"| vdi
+    vdi --> awsep
+    awsep --> mon
+    vdi --> egress
+    egress -->|"HTTPS 443"| kiro
+    kiro --> plogs
+```
 
 **Option B Requirements:**
 - Kiro: Create OIDC + SAML apps in your IdP, configure SCIM provisioning, verify company domain via DNS ([Okta setup](https://kiro.dev/docs/enterprise/identity-provider/okta/))
@@ -326,15 +395,50 @@ This option removes IAM Identity Center entirely, simplifying the architecture f
 
 ### Security Layers
 
-Both architectures share the same 5-layer security model:
+Both architectures share this guide's 5-layer security model. The layers are this guide's own structure, not a model defined by MAS; the TRM references show which MAS TRM Guidelines sections each layer supports.
 
-![MAS TRM Security Layers](diagrams/security-layers.png)
+```mermaid
+flowchart TB
+    dev["Banking developer"]
 
-1. **Identity Layer** - Enterprise IdP + MFA (via IAM Identity Center or direct federation)
-2. **Network Layer** - VPC + Security Groups + allowlisted egress (PrivateLink to Kiro only in the profile region)
-3. **Endpoint Layer** - WorkSpaces VDI + DLP + GPO
-4. **Application Layer** - Kiro admin policy (`managed-settings.json`) + Kiro console governance (models, MCP registry, web tools) + workspace trust + hooks ([Agent Runtime Governance](kiro-docs/agent-runtime-governance.md))
-5. **Audit Layer** - Kiro prompt logging + user activity reports + CloudTrail + CloudWatch + Compliance Validation (the local `PostToolUse` hook audit log is supplementary)
+    subgraph layer1["Layer 1: Identity - TRM 9.1, 9.2"]
+        l1["Enterprise IdP with MFA and SCIM<br>via IAM Identity Center or direct federation"]
+    end
+
+    subgraph layer2["Layer 2: Network - TRM 11.2"]
+        l2["Private VPC, security groups, NACLs<br>AWS service endpoints, allowlisted HTTPS egress"]
+    end
+
+    subgraph layer3["Layer 3: Endpoint and VDI - TRM 9.3, 11.3, 11.4"]
+        l3["WorkSpaces VDI, DLP, GPO hardening<br>no local administrator rights"]
+    end
+
+    subgraph layer4["Layer 4: Application and agent runtime - TRM 3.4, 6.1, 6.3"]
+        l4["Admin policy managed-settings.json, permissions<br>hooks, MCP registry, workspace trust"]
+    end
+
+    subgraph layer5["Layer 5: Audit and monitoring - TRM 12.2, evidence for 15.1 IT audit"]
+        l5["Kiro prompt logs and user activity reports<br>CloudTrail, CloudWatch, GuardDuty, AWS Config"]
+    end
+
+    kiro["Kiro service in the profile region"]
+
+    dev --> l1
+    l1 --> l2
+    l2 --> l3
+    l3 --> l4
+    l4 --> kiro
+    l4 -.->|"hook audit log"| l5
+    kiro -.->|"prompt logs"| l5
+```
+
+> The diagrams above are Mermaid and render on GitHub. To export PNGs instead, run [`diagrams/generate_diagrams.py`](diagrams/generate_diagrams.py) (optional; needs the Python `diagrams` package and Graphviz).
+
+1. **Identity Layer** (TRM 9.1, 9.2) - Enterprise IdP + MFA (via IAM Identity Center or direct federation)
+2. **Network Layer** (TRM 11.2) - VPC + Security Groups + allowlisted egress (PrivateLink to Kiro only in the profile region)
+3. **Endpoint Layer** (TRM 9.3, 11.3, 11.4) - WorkSpaces VDI + DLP + GPO
+4. **Application Layer** (TRM 3.4, 6.1, 6.3) - Kiro admin policy (`managed-settings.json`) + Kiro console governance (models, MCP registry, web tools) + workspace trust + hooks ([Agent Runtime Governance](kiro-docs/agent-runtime-governance.md))
+5. **Audit Layer** (TRM 12.2; evidence for 15.1 IT audit) - Kiro prompt logging + user activity reports + CloudTrail + CloudWatch + Compliance Validation (the local `PostToolUse` hook audit log is supplementary)
 
 > **Where to configure Layer 4:** deploy the admin policy from [`managed-settings/README.md`](managed-settings/README.md), set the Kiro console settings described in [`kiro-docs/security-governance-features.md`](kiro-docs/security-governance-features.md), and add the hooks from [`agent-hooks/README.md`](agent-hooks/README.md). [`kiro-docs/agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) explains how the layers fit together.
 
@@ -532,15 +636,16 @@ For questions, issues, or feedback:
 | 1.0 | 2026-02-25 | Initial release (Sections 1-4) |
 | 1.1 | 2026-02-26 | Complete sections 5-10, add README |
 | 1.2 | 2026-02-28 | Regulatory enhancement: PDPA, Outsourcing, AI/ML, ABS guidelines |
-| 1.3 | 2026-02-28 | AWS CDK infrastructure modules (4 stacks) |
+| 1.3 | 2026-02-28 | AWS CDK infrastructure modules (4 stacks at the time; BackupStack added on 2026-05-17 makes 5) |
 | 1.4 | 2026-02-28 | Working Kiro Skills (3 skills) + GitHub Actions CI/CD |
 | 1.5 | 2026-03-11 | Add Option B: Direct IdP federation architecture (no IAM IDC), fix CDK compilation and tests |
 | 1.6 | 2026-03-11 | Architecture diagrams (PNG), SECURITY.md, steering samples, README consolidation, kiro-docs tracking |
 | 1.7 | 2026-06-04 | Agent Runtime Governance (Layer 4 hooks/agent/audit), security-governance-features reference, CI fixes, AGENTS.md + Kiro-targeting refactor + steering map, QUICK-REFERENCE rename |
-| 1.8 | 2026-06-05 | Agent runtime governance, MDM endpoint enforcement, chaos/pentest, Key Features update |
+| 1.8 | 2026-06-05 | MDM endpoint enforcement (`mdm/`), `destructive-fs-guard` hook, chaos/pentest harness and evidence, Key Features update (later corrected in 1.9) |
+| 1.9 | 2026-10-09 | Correction release: MAS regulatory citations (TRM remap, FSM-N05 1 h / 14 days, Notice 658, AI Risk Management Guidelines), data location (no Singapore profile region) and allowlisted egress, Kiro 1.x governance (`managed-settings/`, fail-closed hooks), CDK hardening (5 stacks, 19 Config rules, 86 tests), tested PII patterns, Mermaid diagrams, CI on Node.js 22 |
 
 ---
 
-**Version:** 1.8
-**Last Updated:** June 5, 2026
+**Version:** 1.9
+**Last Updated:** October 9, 2026
 **Maintained By:** Security Architecture Team
