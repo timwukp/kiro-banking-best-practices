@@ -5,7 +5,7 @@
 [![MAS TRM aligned](https://img.shields.io/badge/MAS%20TRM-aligned-blue)](https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines)
 [![AWS](https://img.shields.io/badge/AWS-Kiro-orange.svg)](https://kiro.dev)
 
-> Security-first guidance for implementing AWS Kiro in banking SDLC environments, designed to support alignment with the Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines. Each institution remains responsible for its own compliance assessment.
+> Security-first guidance for implementing AWS Kiro in SDLC environments, designed to support alignment with the Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines. Each institution remains responsible for its own compliance assessment.
 
 ---
 
@@ -26,11 +26,11 @@
 
 ## Overview
 
-This repository provides comprehensive best practices for banking development teams implementing AWS Kiro (AI-powered development assistant) in Software Development Life Cycle (SDLC) environments. All guidance is designed to support alignment with MAS regulatory requirements for financial institutions operating in Singapore; each institution remains responsible for its own compliance assessment.
+This repository provides comprehensive best practices for FSI development teams implementing AWS Kiro (AI-powered development assistant) in Software Development Life Cycle (SDLC) environments. All guidance is designed to support alignment with MAS regulatory requirements for financial institutions operating in Singapore; each institution remains responsible for its own compliance assessment.
 
 ### What is AWS Kiro?
 
-AWS Kiro is an AI-powered IDE and development assistant that helps developers write, debug, and optimize code. For banking environments, special security controls are needed to support compliance with financial services regulations.
+AWS Kiro is an AI-powered IDE and development assistant that helps developers write, debug, and optimize code. For FSI environments, special security controls are needed to support compliance with financial services regulations.
 
 ### Why This Guide?
 
