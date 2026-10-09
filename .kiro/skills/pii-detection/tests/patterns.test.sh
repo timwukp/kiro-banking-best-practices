@@ -46,6 +46,7 @@ done
 # Token- and key-shaped values are assembled here at runtime, never committed.
 AWS_EXAMPLE_KEY="AKIAIOSFODNN7EXAMPLE"            # AWS documentation example access key ID
 ASIA_KEY="ASIA${AWS_EXAMPLE_KEY#AKIA}"             # same example in temporary-credential form
+AWS_SECRET="wJalrXUtnFEMI""/K7MDENG/bPxRfiCY""EXAMPLEKEY"  # AWS documentation example secret key (split so secret scanners do not pair it with the key ID)
 PEM="-----""BEGIN"
 GHP="gh""p_"; GHO="gh""o_"; GHPAT="github""_pat_"
 TOK36="$(printf 'aB3%.0s' $(seq 1 12))"            # 36 characters
@@ -60,6 +61,7 @@ expand() { # replace {{...}} placeholders in a fixture value
   s="${s//\{\{TOK36\}\}/$TOK36}"
   s="${s//\{\{TOK82\}\}/$TOK82}"
   s="${s//\{\{ASIA\}\}/$ASIA_KEY}"
+  s="${s//\{\{AWS_SECRET\}\}/$AWS_SECRET}"
   printf '%s' "$s"
 }
 

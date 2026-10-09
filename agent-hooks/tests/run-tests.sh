@@ -41,6 +41,7 @@ shell_event() { jq -cn --arg c "$1" '{hook_event_name:"preToolUse",cwd:"/repo",s
 # Token- and key-shaped test values are assembled at runtime (never committed).
 PEM_BEGIN="-----""BEGIN"
 GH_TOKEN="gh""p_$(printf 'a%.0s' $(seq 1 36))"
+AWS_EXAMPLE_SECRET="wJalrXUtnFEMI""K7MDENGbPxRfiCY""EXAMPLEKEY"   # AWS documentation example secret key (split for secret scanners)
 
 echo "== git-guard / destructive-fs-guard fixtures"
 while IFS=$'\t' read -r expected hook cmd gap; do
@@ -54,6 +55,7 @@ while IFS=$'\t' read -r expected desc json; do
   case "$expected" in ''|\#*) continue ;; esac
   json="${json//__PEM_BEGIN__/$PEM_BEGIN}"
   json="${json//__GH_TOKEN__/$GH_TOKEN}"
+  json="${json//__AWS_EXAMPLE_SECRET__/$AWS_EXAMPLE_SECRET}"
   ev="$(jq -cn --argjson ti "$json" '{hook_event_name:"preToolUse",cwd:"/repo",session_id:"test",tool_name:"fs_write",tool_input:$ti}')" \
     || { bad "pii fixture is not valid JSON: $desc"; continue; }
   expect "pii-guard: $desc" "$expected" "$(run_hook pii-guard.sh "$ev")"

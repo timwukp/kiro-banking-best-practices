@@ -5,7 +5,7 @@
 
 **Version:** 1.9  
 **Date:** October 2026  
-**Target Audience:** Banking Development Teams in Singapore  
+**Target Audience:** Development teams at Singapore financial institutions (banking reference implementation)  
 **Regulatory Frameworks:**
 - Monetary Authority of Singapore (MAS) Technology Risk Management (TRM) Guidelines (18 January 2021), which apply to all MAS-regulated financial institutions
 - MAS Notice [FSM-N05](https://www.mas.gov.sg/regulation/notices/notice-fsm-n05) (Technology Risk Management) and Notice [FSM-N06](https://www.mas.gov.sg/regulation/notices/notice-fsm-n06) (Cyber Hygiene), binding for banks from 10 May 2024; other sectors have equivalent notices (see [README – Applicability](README.md#applicability-across-mas-regulated-financial-institutions))

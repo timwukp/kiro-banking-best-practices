@@ -20,7 +20,7 @@ pass()  { echo "  PASS: $1"; }
 indent() { sed 's/^/    /'; }
 
 echo "================================================"
-echo "  Kiro Banking Best Practices - Repo Validator"
+echo "  AWS Kiro in FSI Best Practices - Repo Validator"
 echo "================================================"
 echo ""
 

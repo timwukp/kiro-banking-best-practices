@@ -1,9 +1,9 @@
 ---
 inclusion: always
 ---
-# Repo map — Kiro Banking Best Practices
+# Repo map — AWS Kiro in FSI Best Practices
 
-MAS-aligned Kiro banking SDLC: docs + CDK + Skills/hooks (workload region `ap-southeast-1`; Kiro profile region `us-east-1` or `eu-central-1`).
+MAS-aligned Kiro for financial services (banking reference implementation): docs + CDK + Skills/hooks (workload region `ap-southeast-1`; Kiro profile region `us-east-1` or `eu-central-1`).
 
 - **Full doc map & onboarding:** `AGENTS.md` (agents) and the "Start Here" section of `README.md` (humans).
 - **Admin policy (client-enforced):** `managed-settings/` (`managed-settings.json`, `permissions.yaml` template, MCP registry example).

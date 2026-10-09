@@ -1,4 +1,4 @@
-# Quick Reference Card: AWS Kiro Banking Best Practices
+# Quick Reference Card: AWS Kiro in FSI Best Practices
 
 > **Audience:** everyone · **Purpose:** one-page checklist / quick reference · **Prerequisites:** none.
 

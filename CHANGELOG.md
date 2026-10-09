@@ -26,6 +26,8 @@ Correction release. A review of 1.0–1.8 found inaccurate regulatory citations,
 - **Navigation:** the Part 1 table of contents links Sections 5–14 to Part 2, and the trailing "Document continues" placeholder is replaced by a link to Part 2
 
 ### Changed
+- **Repository renamed** from `kiro-banking-best-practices` to `kiro-fsi-best-practices` to reflect that the MAS TRM Guidelines apply to all MAS-regulated financial institutions. Project titles and audience descriptions now say "FSI"; the banking reference implementation, file names and CDK physical resource names (`kiro-banking-*`) are unchanged. GitHub redirects the old URL.
+- **Test fixtures:** the AWS documentation example secret key is now assembled at runtime in the hook and PII-pattern test fixtures, so repository secret scanning does not flag the example credential pair.
 - **Kiro 1.x governance model:** runtime controls moved to the admin policy (`managed-settings.json` deny/ask rules and sign-in restriction), user `permissions.yaml`, v1 hook files and workspace trust; the reference agent migrated from `toolsSettings` to `permissions.rules`; MCP lockdown through MCP governance, a version-pinned registry and workspace trust
 - **MDM:** `mdm/lockdown-*` deploy `managed-settings.json` to the official per-OS paths with validation (no `allow` rules), hash-verified hook deployment, a drift check and a dry-run mode; limits documented (a local administrator can still change the files)
 - **Chaos harness:** safety gates (throwaway VM, no deletion of existing users); round 2 now exercises the shipped hooks, the shipped policy and `mdm/lockdown-linux.sh`

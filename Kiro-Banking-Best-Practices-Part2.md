@@ -1,4 +1,4 @@
-# AWS Kiro Banking Best Practices - Part 2
+# AWS Kiro in FSI Best Practices - Part 2
 ## Sections 5-14: MCP Governance, SDLC, Data Protection, Operations & Regulatory Compliance
 
 > **Audience:** security architects, compliance officers, banking developers · **Purpose:** Sections 5–14 — MCP governance, SDLC, PDPA, FEAT, operations · **Prerequisites:** read Part 1 (Sections 1–4) first · ↩ [README](README.md)

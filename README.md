@@ -1,11 +1,13 @@
-# AWS Kiro Banking Best Practices
+# AWS Kiro in FSI Best Practices
 ## MAS-Aligned Implementation Guide for Singapore Financial Institutions
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MAS TRM aligned](https://img.shields.io/badge/MAS%20TRM-aligned-blue)](https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines)
 [![AWS](https://img.shields.io/badge/AWS-Kiro-orange.svg)](https://kiro.dev)
 
-> Security-first guidance for implementing AWS Kiro in banking SDLC environments, designed to support alignment with the Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines. Each institution remains responsible for its own compliance assessment.
+> **Renamed:** this repository was renamed from `kiro-banking-best-practices` to `kiro-fsi-best-practices` (October 2026). Old links and clones redirect automatically. The banking reference implementation, file names and CDK resource names are unchanged.
+
+> Security-first guidance for implementing AWS Kiro in financial services (FSI) SDLC environments, with a Singapore banking reference implementation, designed to support alignment with the Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines. Each institution remains responsible for its own compliance assessment.
 
 ---
 
@@ -26,11 +28,11 @@
 
 ## Overview
 
-This repository provides comprehensive best practices for banking development teams implementing AWS Kiro (AI-powered development assistant) in Software Development Life Cycle (SDLC) environments. All guidance is designed to support alignment with MAS regulatory requirements for financial institutions operating in Singapore; each institution remains responsible for its own compliance assessment.
+This repository provides comprehensive best practices for financial services development teams — banks, insurers, capital markets firms, payment institutions and other MAS-regulated FIs — implementing AWS Kiro (AI-powered development assistant) in Software Development Life Cycle (SDLC) environments. All guidance is designed to support alignment with MAS regulatory requirements for financial institutions operating in Singapore; each institution remains responsible for its own compliance assessment.
 
 ### What is AWS Kiro?
 
-AWS Kiro is an AI-powered IDE and development assistant that helps developers write, debug, and optimize code. For banking environments, special security controls are needed to support compliance with financial services regulations.
+AWS Kiro is an AI-powered IDE and development assistant that helps developers write, debug, and optimize code. For financial services environments, special security controls are needed to support compliance with financial services regulations.
 
 ### Why This Guide?
 
@@ -221,8 +223,8 @@ Fast path for first-time users (full prerequisites are below).
 # 1. Install Kiro CLI — see https://kiro.dev/docs/cli/
 
 # 2. Clone and enter the repo
-git clone https://github.com/timwukp/kiro-banking-best-practices.git
-cd kiro-banking-best-practices
+git clone https://github.com/timwukp/kiro-fsi-best-practices.git
+cd kiro-fsi-best-practices
 
 # 3. Validate the reference locked-down agent
 kiro-cli agent validate --path agent-hooks/banking-secure.agent.json
@@ -523,9 +525,9 @@ The MAS TRM Guidelines apply to all MAS-regulated financial institutions, includ
 
 This documentation is designed for:
 
-- **Banking Developers** - Implementing Kiro in daily SDLC workflows
+- **FSI Developers** - Banks, insurers, capital markets and payment institutions implementing Kiro in daily SDLC workflows (the reference implementation is banking-focused; see [Applicability Across MAS-Regulated Financial Institutions](#applicability-across-mas-regulated-financial-institutions))
 - **Security Architects** - Designing secure AI development environments
-- **Compliance Officers** - Validating MAS regulatory compliance
+- **Compliance Officers** - Assessing alignment with MAS requirements
 - **Cloud Operations Teams** - Deploying and managing Kiro infrastructure
 - **Development Team Leads** - Establishing secure development practices
 - **IT Auditors** - Reviewing security controls and audit trails
@@ -642,7 +644,7 @@ For questions, issues, or feedback:
 | 1.6 | 2026-03-11 | Architecture diagrams (PNG), SECURITY.md, steering samples, README consolidation, kiro-docs tracking |
 | 1.7 | 2026-06-04 | Agent Runtime Governance (Layer 4 hooks/agent/audit), security-governance-features reference, CI fixes, AGENTS.md + Kiro-targeting refactor + steering map, QUICK-REFERENCE rename |
 | 1.8 | 2026-06-05 | MDM endpoint enforcement (`mdm/`), `destructive-fs-guard` hook, chaos/pentest harness and evidence, Key Features update (later corrected in 1.9) |
-| 1.9 | 2026-10-09 | Correction release: MAS regulatory citations (TRM remap, FSM-N05 1 h / 14 days, Notice 658, AI Risk Management Guidelines), data location (no Singapore profile region) and allowlisted egress, Kiro 1.x governance (`managed-settings/`, fail-closed hooks), CDK hardening (5 stacks, 19 Config rules, 86 tests), tested PII patterns, Mermaid diagrams, CI on Node.js 22 |
+| 1.9 | 2026-10-09 | Repository renamed to `kiro-fsi-best-practices`. Correction release: MAS regulatory citations (TRM remap, FSM-N05 1 h / 14 days, Notice 658, AI Risk Management Guidelines), data location (no Singapore profile region) and allowlisted egress, Kiro 1.x governance (`managed-settings/`, fail-closed hooks), CDK hardening (5 stacks, 19 Config rules, 86 tests), tested PII patterns, Mermaid diagrams, CI on Node.js 22 |
 
 ---
 

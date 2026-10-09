@@ -4,7 +4,7 @@
 > Human entry point: the **Start Here** section in [`README.md`](README.md). Keep this file terse.
 
 ## What this repo is
-MAS-aligned best practices for deploying **AWS Kiro** in Singapore **banking** SDLC. Contents: documentation, AWS **CDK** (TypeScript) infrastructure, Kiro **managed settings**, and Kiro **Skills + hooks**. Workload region: `ap-southeast-1`; Kiro profile region: `us-east-1` or `eu-central-1` (Kiro has no Singapore profile region).
+MAS-aligned best practices for deploying **AWS Kiro** in Singapore **financial services (FSI)** SDLC, with a **banking** reference implementation. Repository: `timwukp/kiro-fsi-best-practices` (renamed from `kiro-banking-best-practices`; file names and CDK physical names keep "banking" and must not be renamed). Contents: documentation, AWS **CDK** (TypeScript) infrastructure, Kiro **managed settings**, and Kiro **Skills + hooks**. Workload region: `ap-southeast-1`; Kiro profile region: `us-east-1` or `eu-central-1` (Kiro has no Singapore profile region).
 
 ## Task → file
 | If you need to… | Read / use |

@@ -1,5 +1,5 @@
 """
-Optional PNG export of the architecture diagrams for Kiro Banking Best Practices.
+Optional PNG export of the architecture diagrams for AWS Kiro in FSI Best Practices.
 
 The README embeds the same three diagrams as Mermaid blocks, which GitHub renders
 natively; those are the maintained versions. Use this script only when you need
