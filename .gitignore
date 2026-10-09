@@ -13,6 +13,7 @@
 # CDK build artifacts
 cdk/node_modules/
 cdk/cdk.out/
+cdk/build/
 cdk/*.js
 !cdk/jest.config.js
 cdk/*.d.ts

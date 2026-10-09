@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { Aspects } from 'aws-cdk-lib';
 import { AwsSolutionsChecks } from 'cdk-nag';
@@ -21,6 +20,9 @@ let config: KiroBankingConfig = envName === 'prod' ? prodConfig : devConfig;
 //   -c region=<aws-region>       workload region for all stacks (e.g. us-east-1 to
 //                                create the Kiro endpoints in the Kiro profile region)
 //   -c egress=nat-dns-firewall   egress mode (none | nat-dns-firewall)
+//   -c createConfigRecorder=true | -c enableGuardDuty=false |
+//   -c enableSecurityHub=false   | -c enableAccessAnalyzer=false
+//                                account-level singletons (see KiroBankingConfig)
 const regionOverride = app.node.tryGetContext('region');
 if (regionOverride !== undefined) {
   if (typeof regionOverride !== 'string' || !/^[a-z]{2}(-[a-z]+)+-\d+$/.test(regionOverride)) {
@@ -35,6 +37,18 @@ if (egressOverride !== undefined) {
     throw new Error(`Invalid -c egress=${String(egressOverride)} (expected one of: ${EGRESS_MODES.join(', ')})`);
   }
   config = { ...config, egress: { ...config.egress, mode: egressOverride as EgressMode } };
+}
+
+const BOOLEAN_OVERRIDES = ['createConfigRecorder', 'enableGuardDuty', 'enableSecurityHub', 'enableAccessAnalyzer'] as const;
+for (const key of BOOLEAN_OVERRIDES) {
+  const value: unknown = app.node.tryGetContext(key);
+  if (value === undefined) {
+    continue;
+  }
+  if (value !== true && value !== false && value !== 'true' && value !== 'false') {
+    throw new Error(`Invalid -c ${key}=${String(value)} (expected true or false)`);
+  }
+  config = { ...config, [key]: value === true || value === 'true' };
 }
 
 const env: cdk.Environment = {

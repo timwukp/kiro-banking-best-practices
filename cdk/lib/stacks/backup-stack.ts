@@ -4,13 +4,14 @@ import * as kms from 'aws-cdk-lib/aws-kms';
 import * as events from 'aws-cdk-lib/aws-events';
 import { Construct } from 'constructs';
 import { NagSuppressions } from 'cdk-nag';
-import { KiroBankingConfig } from '../../config/environments';
+import { DEFAULT_BACKUP_SCHEDULE_CRON, KiroBankingConfig } from '../../config/environments';
 
 /**
  * Backup Stack: AWS Backup vault and plan for system backup and recovery.
  *
  * MAS TRM Section 8 (IT Resilience), 8.4 (System Backup and Recovery):
- * - Daily automated backups with 35-day retention
+ * - Daily automated backups with 35-day retention, scheduled by
+ *   backupScheduleCron (UTC; default 18:00 UTC = 02:00 Singapore time)
  * - Encrypted backup vault with customer-managed KMS key (TRM 10.2)
  * - Supports regulatory data retention requirements
  */
@@ -23,6 +24,12 @@ export class BackupStack extends cdk.Stack {
     super(scope, id, props);
 
     const { config } = props;
+
+    // AWS Backup cron expressions are evaluated in UTC.
+    const scheduleCron = config.backupScheduleCron ?? DEFAULT_BACKUP_SCHEDULE_CRON;
+    if (!/^cron\(\S+( \S+){5}\)$/.test(scheduleCron)) {
+      throw new Error(`backupScheduleCron must be an AWS cron expression with six fields, e.g. ${DEFAULT_BACKUP_SCHEDULE_CRON}; got '${scheduleCron}'`);
+    }
 
     // --- KMS Key for Backup Vault Encryption ---
     const backupKey = new kms.Key(this, 'BackupVaultKey', {
@@ -47,7 +54,7 @@ export class BackupStack extends cdk.Stack {
     plan.addRule(new backup.BackupPlanRule({
       ruleName: 'DailyBackup',
       backupVault: vault,
-      scheduleExpression: events.Schedule.expression('cron(0 5 * * ? *)'),
+      scheduleExpression: events.Schedule.expression(scheduleCron),
       deleteAfter: cdk.Duration.days(35),
       startWindow: cdk.Duration.hours(1),
       completionWindow: cdk.Duration.hours(2),
@@ -69,10 +76,6 @@ export class BackupStack extends cdk.Stack {
     });
 
     // CDK Nag suppressions
-    NagSuppressions.addResourceSuppressions(backupKey, [
-      { id: 'AwsSolutions-KMS5', reason: 'Key rotation is enabled via enableKeyRotation property' },
-    ]);
-
     NagSuppressions.addResourceSuppressions(plan, [
       {
         id: 'AwsSolutions-IAM4',

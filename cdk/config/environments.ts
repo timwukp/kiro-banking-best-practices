@@ -64,9 +64,72 @@ export interface KiroBankingConfig {
   readonly externalIdpDomain?: string;
   readonly egress: EgressConfig;
   readonly workspaceBundleId?: string;
+  /**
+   * Days to keep CloudTrail log files in the audit-log bucket (also used for the
+   * AWS Config history bucket when `createConfigRecorder` is true).
+   */
   readonly cloudTrailRetentionDays: number;
+  /**
+   * Default S3 Object Lock retention, in days, for new objects in the audit-log
+   * bucket. Uses GOVERNANCE mode: users with s3:BypassGovernanceRetention can
+   * still shorten or remove the lock. COMPLIANCE mode cannot be shortened or
+   * removed by anyone, including the root user, until it expires, so only switch
+   * after legal review. Must not exceed `cloudTrailRetentionDays`.
+   * @default 30
+   */
+  readonly auditLogObjectLockDays?: number;
+  /**
+   * Days to keep S3 server access logs of the audit-log bucket. They record who
+   * read or changed the audit logs; raise this to `cloudTrailRetentionDays` if
+   * your record-keeping policy requires access records for the same period.
+   * @default 365
+   */
+  readonly accessLogRetentionDays?: number;
+  /**
+   * Create an AWS Config configuration recorder and delivery channel in this
+   * account and region. Each account and region supports only one recorder, so
+   * leave this false where AWS Control Tower, an organization-wide setup or
+   * another stack already records; the Config rules then use that recorder.
+   * @default false
+   */
+  readonly createConfigRecorder?: boolean;
+  /**
+   * When `createConfigRecorder` is true, also record the global IAM resource
+   * types (users, groups, roles, customer managed policies). Record them in one
+   * region only: set false for every other region you deploy this app to.
+   * @default true
+   */
+  readonly configRecorderGlobalResources?: boolean;
+  /**
+   * Create the GuardDuty detector. A region supports one detector per account;
+   * set false where GuardDuty is enabled by a delegated administrator. Findings
+   * are still routed to the security topic either way.
+   * @default true
+   */
+  readonly enableGuardDuty?: boolean;
+  /**
+   * Enable AWS Security Hub (one hub per account and region). Set false where
+   * Security Hub is enabled centrally for the organization.
+   * @default true
+   */
+  readonly enableSecurityHub?: boolean;
+  /**
+   * Create an account-level IAM Access Analyzer (external access). Each account
+   * and region allows one account-level analyzer per type: set false where one
+   * already exists or analyzers are managed centrally.
+   * @default true
+   */
+  readonly enableAccessAnalyzer?: boolean;
+  /**
+   * AWS Backup schedule in UTC (AWS cron syntax).
+   * @default DEFAULT_BACKUP_SCHEDULE_CRON (02:00 Singapore time)
+   */
+  readonly backupScheduleCron?: string;
   readonly enableCdkNag: boolean;
 }
+
+/** 18:00 UTC = 02:00 Singapore time (UTC+8, no daylight saving). */
+export const DEFAULT_BACKUP_SCHEDULE_CRON = 'cron(0 18 * * ? *)';
 
 export const devConfig: KiroBankingConfig = {
   environment: 'dev',
@@ -87,6 +150,15 @@ export const devConfig: KiroBankingConfig = {
     allowedDomains: [],
   },
   cloudTrailRetentionDays: 90,
+  auditLogObjectLockDays: 30,
+  accessLogRetentionDays: 365,
+  // Account-level singletons: set to false (or true for the recorder) to match
+  // what your landing zone already provides in this account and region.
+  createConfigRecorder: false,
+  enableGuardDuty: true,
+  enableSecurityHub: true,
+  enableAccessAnalyzer: true,
+  backupScheduleCron: DEFAULT_BACKUP_SCHEDULE_CRON,
   enableCdkNag: true,
 };
 
@@ -110,5 +182,14 @@ export const prodConfig: KiroBankingConfig = {
   },
   workspaceBundleId: 'wsb-gm4b5tx0y', // PowerPro bundle - update with your actual bundle ID
   cloudTrailRetentionDays: 2555, // ~7 years; set per your record-keeping obligations (commonly 5-7 years)
+  auditLogObjectLockDays: 365,
+  accessLogRetentionDays: 365,
+  // Account-level singletons: set to false (or true for the recorder) to match
+  // what your landing zone already provides in this account and region.
+  createConfigRecorder: false,
+  enableGuardDuty: true,
+  enableSecurityHub: true,
+  enableAccessAnalyzer: true,
+  backupScheduleCron: DEFAULT_BACKUP_SCHEDULE_CRON,
   enableCdkNag: true,
 };

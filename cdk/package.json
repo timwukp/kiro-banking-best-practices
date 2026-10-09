@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "description": "AWS CDK infrastructure for MAS-aligned Kiro banking environments",
   "bin": {
-    "kiro-banking": "bin/kiro-banking.js"
+    "kiro-banking": "build/bin/kiro-banking.js"
   },
   "scripts": {
     "build": "tsc",

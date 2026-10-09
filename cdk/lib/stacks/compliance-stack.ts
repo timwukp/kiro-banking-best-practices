@@ -2,7 +2,11 @@ import * as cdk from 'aws-cdk-lib';
 import * as config from 'aws-cdk-lib/aws-config';
 import * as accessanalyzer from 'aws-cdk-lib/aws-accessanalyzer';
 import * as securityhub from 'aws-cdk-lib/aws-securityhub';
-import { Construct } from 'constructs';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as kms from 'aws-cdk-lib/aws-kms';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import { Construct, IDependable } from 'constructs';
+import { NagSuppressions } from 'cdk-nag';
 import { KiroBankingConfig } from '../../config/environments';
 
 /**
@@ -22,6 +26,11 @@ import { KiroBankingConfig } from '../../config/environments';
  * Note: the AWS Config rule names (e.g. mas-trm-15-*) keep their original
  * numbering so that deployed rules are not replaced. The rule description
  * carries the current TRM mapping.
+ *
+ * Prerequisite: AWS Config rules need a configuration recorder in the account
+ * and region. Set createConfigRecorder: true to create one here (with its
+ * delivery channel and bucket), or keep the default (false) where AWS Control
+ * Tower or an organization-wide setup already records.
  */
 export interface ComplianceStackProps extends cdk.StackProps {
   readonly config: KiroBankingConfig;
@@ -32,6 +41,10 @@ export class ComplianceStack extends cdk.Stack {
     super(scope, id, props);
 
     const { config: envConfig } = props;
+
+    // Each account and region supports one configuration recorder; see
+    // KiroBankingConfig.createConfigRecorder.
+    const recorderResources = (envConfig.createConfigRecorder ?? false) ? this.addConfigRecorder(envConfig) : [];
 
     // ═══════════════════════════════════════════════════════════
     // MAS TRM Section 9: Access Control
@@ -199,19 +212,144 @@ export class ComplianceStack extends cdk.Stack {
     // Security Services
     // ═══════════════════════════════════════════════════════════
 
-    // IAM Access Analyzer
-    new accessanalyzer.CfnAnalyzer(this, 'AccessAnalyzer', {
-      analyzerName: `kiro-banking-analyzer-${envConfig.environment}`,
-      type: 'ACCOUNT',
-    });
+    // Account-level singletons: skip them where they are managed centrally
+    // (e.g. a delegated administrator for the organization).
 
-    // SecurityHub
-    new securityhub.CfnHub(this, 'SecurityHub', {});
+    // IAM Access Analyzer
+    if (envConfig.enableAccessAnalyzer ?? true) {
+      new accessanalyzer.CfnAnalyzer(this, 'AccessAnalyzer', {
+        analyzerName: `kiro-banking-analyzer-${envConfig.environment}`,
+        type: 'ACCOUNT',
+      });
+    }
+
+    // SecurityHub (one hub per account and region)
+    if (envConfig.enableSecurityHub ?? true) {
+      new securityhub.CfnHub(this, 'SecurityHub', {});
+    }
+
+    // Rules can only be created once a recorder exists.
+    const rules = this.node.children.filter((child): child is config.ManagedRule => child instanceof config.ManagedRule);
+    for (const rule of rules) {
+      rule.node.addDependency(...recorderResources);
+    }
 
     // --- Outputs ---
     new cdk.CfnOutput(this, 'ComplianceRuleCount', {
-      value: '19',
+      value: String(rules.length),
       description: 'Number of AWS Config compliance rules deployed',
     });
+  }
+
+  /**
+   * Configuration recorder (all supported resource types), delivery channel and
+   * a dedicated encrypted, versioned, SSL-only bucket with server access logs.
+   * AWS Config does not support delivery to a bucket with Object Lock, so the
+   * audit-log bucket is not reused. Returns the resources the rules depend on.
+   */
+  private addConfigRecorder(envConfig: KiroBankingConfig): IDependable[] {
+    const env = envConfig.environment;
+
+    const accessLogBucket = new s3.Bucket(this, 'ConfigAccessLogBucket', {
+      bucketName: `kiro-banking-config-access-logs-${env}-${cdk.Aws.ACCOUNT_ID}`,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      lifecycleRules: [{ expiration: cdk.Duration.days(envConfig.accessLogRetentionDays ?? 365) }],
+    });
+
+    const bucketKey = new kms.Key(this, 'ConfigBucketKey', {
+      alias: `kiro-banking-config-${env}`,
+      description: 'Encrypts AWS Config configuration history and snapshots (MAS TRM 10.2, 12.2)',
+      enableKeyRotation: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      pendingWindow: cdk.Duration.days(30),
+    });
+
+    const bucket = new s3.Bucket(this, 'ConfigBucket', {
+      bucketName: `kiro-banking-config-${env}-${cdk.Aws.ACCOUNT_ID}`,
+      encryption: s3.BucketEncryption.KMS,
+      encryptionKey: bucketKey,
+      bucketKeyEnabled: true,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      versioned: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      serverAccessLogsBucket: accessLogBucket,
+      serverAccessLogsPrefix: 'config-bucket-access/',
+      lifecycleRules: [
+        {
+          expiration: cdk.Duration.days(envConfig.cloudTrailRetentionDays),
+          noncurrentVersionExpiration: cdk.Duration.days(90),
+        },
+      ],
+    });
+
+    // Role permissions from
+    // https://docs.aws.amazon.com/config/latest/developerguide/iamrole-permissions.html
+    const role = new iam.Role(this, 'ConfigRecorderRole', {
+      description: 'Lets AWS Config record resource configurations and deliver them to the Config bucket',
+      assumedBy: new iam.ServicePrincipal('config.amazonaws.com').withConditions({
+        StringEquals: { 'aws:SourceAccount': this.account },
+        ArnLike: { 'aws:SourceArn': this.formatArn({ service: 'config', resource: '*' }) },
+      }),
+      managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWS_ConfigRole')],
+    });
+    role.addToPolicy(new iam.PolicyStatement({
+      sid: 'ConfigBucketDelivery',
+      actions: ['s3:PutObject', 's3:PutObjectAcl'],
+      resources: [bucket.arnForObjects(`AWSLogs/${this.account}/*`)],
+      conditions: { StringLike: { 's3:x-amz-acl': 'bucket-owner-full-control' } },
+    }));
+    role.addToPolicy(new iam.PolicyStatement({
+      sid: 'ConfigBucketAcl',
+      actions: ['s3:GetBucketAcl'],
+      resources: [bucket.bucketArn],
+    }));
+    role.addToPolicy(new iam.PolicyStatement({
+      sid: 'ConfigBucketKey',
+      actions: ['kms:Decrypt', 'kms:GenerateDataKey'],
+      resources: [bucketKey.keyArn],
+    }));
+
+    const recorder = new config.CfnConfigurationRecorder(this, 'ConfigRecorder', {
+      name: `kiro-banking-config-recorder-${env}`,
+      roleArn: role.roleArn,
+      recordingGroup: {
+        allSupported: true,
+        // Record the global IAM resource types in one region only.
+        includeGlobalResourceTypes: envConfig.configRecorderGlobalResources ?? true,
+      },
+    });
+    recorder.node.addDependency(role);
+
+    // A delivery channel can only be created after the recorder; CloudFormation
+    // starts the recorder once the delivery channel exists.
+    const deliveryChannel = new config.CfnDeliveryChannel(this, 'ConfigDeliveryChannel', {
+      name: `kiro-banking-config-delivery-${env}`,
+      s3BucketName: bucket.bucketName,
+      s3KmsKeyArn: bucketKey.keyArn,
+      configSnapshotDeliveryProperties: { deliveryFrequency: 'TwentyFour_Hours' },
+    });
+    deliveryChannel.addDependency(recorder);
+    deliveryChannel.node.addDependency(role, bucket);
+
+    NagSuppressions.addResourceSuppressions(role, [
+      {
+        id: 'AwsSolutions-IAM4',
+        reason: 'AWS_ConfigRole is the AWS managed policy for AWS Config recorder roles; AWS keeps it up to date ' +
+          'with the read permissions needed for every resource type that Config records',
+        appliesTo: ['Policy::arn:<AWS::Partition>:iam::aws:policy/service-role/AWS_ConfigRole'],
+      },
+      {
+        id: 'AwsSolutions-IAM5',
+        reason: 'AWS Config writes configuration history and snapshot objects with generated names under ' +
+          'AWSLogs/<account>/ in its dedicated bucket (pattern from the AWS Config documentation)',
+        appliesTo: [{ regex: '/^Resource::<ConfigBucket[0-9A-F]+\\.Arn>\\/AWSLogs\\/(<AWS::AccountId>|\\d{12})\\/\\*$/' }],
+      },
+    ], true);
+
+    return [recorder, deliveryChannel];
   }
 }

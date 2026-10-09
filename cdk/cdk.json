@@ -1,5 +1,6 @@
 {
-  "app": "npx ts-node --prefer-ts-exts bin/kiro-banking.ts",
+  "app": "node build/bin/kiro-banking.js",
+  "build": "npx tsc",
   "watch": {
     "include": ["**"],
     "exclude": [
@@ -12,6 +13,7 @@
       "package*.json",
       "yarn.lock",
       "node_modules",
+      "build",
       "test"
     ]
   },
