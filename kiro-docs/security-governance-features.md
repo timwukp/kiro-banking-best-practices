@@ -4,7 +4,7 @@ A consolidated, banking-focused reference of Kiro's security and governance
 capabilities across **CLI**, **IDE**, and **General/Enterprise** surfaces,
 compiled from the official Kiro changelog. Use this alongside
 `privacy-and-security.md` and `mcp-security.md` when designing a
-MAS-compliant Kiro deployment.
+MAS-aligned Kiro deployment.
 
 > **Last reviewed:** 2026-06-04. Verify current behaviour against
 > https://kiro.dev/changelog/ before relying on any single item.
@@ -78,7 +78,8 @@ mechanism behind the Tier 1/2/3 MCP model in the main SDLC guide.
 - Use `${VAR}` placeholders for user-specific values (e.g. auth tokens).
 - Syncs every 24h; works with the existing MCP on/off toggle.
 
-> **MAS mapping:** TRM 3.1 (Governance), 11.2 (Network Security — controls
+> **MAS mapping:** TRM 3.4 (Management of Third Party Services), 6.1.3 (review and
+> test third-party code before integration), 11.2 (Network Security — controls
 > outbound integrations). Pin versions and require a change record per registry update.
 
 ### 2.2 Model Governance (IDE 0.11)
@@ -89,7 +90,8 @@ Curate an approved model list and set a default model org-wide.
   *global* cross-region inference until they reach GA with regional inference.
 - Only approved models appear in the selector across IDE and CLI.
 
-> **MAS mapping:** TRM 10 (Cryptography/data handling), data-residency obligations.
+> **MAS mapping:** TRM 3.4 / 4.3 (third-party services and risk assessment of model
+> providers), 11.1 (Data Security), data-residency obligations.
 
 ### 2.3 Web Tools Governance (IDE 0.9 / CLI 1.25.0)
 Disable `web_search` and `web_fetch` organization-wide to prevent
@@ -105,8 +107,9 @@ unreviewed custom agents from executing in regulated workspaces.
 Daily activity reports (S3 CSV) now include `User_Email` and per-model
 message counts; console shows user emails; subscription data is CSV-exportable.
 
-> **MAS mapping:** TRM 15 (IT Audit). Feed reports into your SIEM and retain
-> per your audit-retention policy (≥ the guide's 90-day minimum).
+> **MAS mapping:** TRM 12.2 (Cyber Event Monitoring and Detection); the reports also
+> serve as evidence for the independent IT audit function (TRM 15.1). Feed reports
+> into your SIEM and retain per your audit-retention policy (≥ the guide's 90-day minimum).
 
 ---
 
@@ -119,8 +122,9 @@ message counts; console shows user emails; subscription data is CSV-exportable.
 - **Device Flow / Remote Auth** (CLI 1.24.0, 2.1): For SSH/SSM/container/VDI
   sessions without port forwarding. Useful for Amazon WorkSpaces VDI.
 
-> **MAS mapping:** TRM 9.1 (Access Control). Enforce MFA at the IdP; rely on
-> SCIM deprovisioning for leavers.
+> **MAS mapping:** TRM 9.1 (User Access Management). Enforce MFA at the IdP; rely on
+> SCIM deprovisioning for leavers. Banks: MAS Notice FSM-N06 para 4.6 requires MFA
+> for all administrative accounts on critical systems.
 
 ---
 

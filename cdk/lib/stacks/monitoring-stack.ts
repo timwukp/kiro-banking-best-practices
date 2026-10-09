@@ -21,16 +21,15 @@ export interface MonitoringStackProps extends cdk.StackProps {
 /**
  * Monitoring Stack: CloudTrail audit logging and CloudWatch alarms.
  *
- * MAS TRM Section 15 (IT Audit):
+ * MAS TRM 12.2 (Cyber Event Monitoring and Detection):
  * - Comprehensive audit trail for all Kiro activities
  * - Log file integrity validation
- * - Encrypted log storage with customer-managed KMS key
- * - CloudWatch alarms for security-relevant events
+ * - Encrypted log storage with customer-managed KMS key (TRM 10.2)
+ * - CloudWatch alarms and GuardDuty for security-relevant events
+ * - SNS notifications for the security team (input to TRM 12.3 incident response)
  *
- * MAS TRM Section 12 (Cyber Security Operations):
- * - Security event monitoring
- * - Anomaly detection via CloudWatch alarms
- * - SNS notifications for security team
+ * The logs also serve as evidence for the independent IT audit function
+ * (MAS TRM 15.1). TRM Section 15 covers the audit function, not logging itself.
  */
 export class MonitoringStack extends cdk.Stack {
   public readonly trail: cloudtrail.Trail;
@@ -123,7 +122,7 @@ export class MonitoringStack extends cdk.Stack {
 
     const unauthorizedApiAlarm = new cloudwatch.Alarm(this, 'UnauthorizedApiAlarm', {
       alarmName: `kiro-banking-unauthorized-api-${config.environment}`,
-      alarmDescription: 'MAS TRM 9.1: Alert on unauthorized API calls to Kiro services',
+      alarmDescription: 'MAS TRM 12.2 / 9.1: Alert on unauthorized API calls to Kiro services',
       metric: unauthorizedApiFilter.metric({
         statistic: 'Sum',
         period: cdk.Duration.minutes(5),
@@ -146,7 +145,7 @@ export class MonitoringStack extends cdk.Stack {
 
     const noMfaSignInAlarm = new cloudwatch.Alarm(this, 'NoMfaSignInAlarm', {
       alarmName: `kiro-banking-no-mfa-signin-${config.environment}`,
-      alarmDescription: 'MAS TRM 9.1: Alert on console sign-in without MFA',
+      alarmDescription: 'MAS TRM 12.2 / 9.1: Alert on console sign-in without MFA',
       metric: noMfaFilter.metric({
         statistic: 'Sum',
         period: cdk.Duration.minutes(5),
@@ -169,7 +168,7 @@ export class MonitoringStack extends cdk.Stack {
 
     const iamPolicyChangeAlarm = new cloudwatch.Alarm(this, 'IamPolicyChangeAlarm', {
       alarmName: `kiro-banking-iam-policy-change-${config.environment}`,
-      alarmDescription: 'MAS TRM 9.1: Alert on IAM policy modifications',
+      alarmDescription: 'MAS TRM 12.2 / 9.2: Alert on IAM policy modifications',
       metric: iamPolicyChangeFilter.metric({
         statistic: 'Sum',
         period: cdk.Duration.minutes(5),
@@ -192,7 +191,7 @@ export class MonitoringStack extends cdk.Stack {
 
     const sgChangeAlarm = new cloudwatch.Alarm(this, 'SgChangeAlarm', {
       alarmName: `kiro-banking-sg-change-${config.environment}`,
-      alarmDescription: 'MAS TRM 11.2: Alert on security group modifications',
+      alarmDescription: 'MAS TRM 12.2 / 11.2: Alert on security group modifications',
       metric: sgChangeFilter.metric({
         statistic: 'Sum',
         period: cdk.Duration.minutes(5),

@@ -237,10 +237,14 @@ aws q update-organization-settings \
 | Control | MAS Section | Implementation | Evidence |
 |---------|-------------|----------------|----------|
 | Access Control | 9.1 | IAM IDC + MFA | CloudTrail logs |
-| Encryption | 10.1 | TLS 1.2+ + KMS | KMS key policy |
+| Encryption | 10.1 (TLS), 10.2 (key management) | TLS 1.2+ + KMS customer-managed keys with rotation | KMS key policy |
 | Data Security | 11.1 | DLP + Encryption | DLP reports |
 | Network Security | 11.2 | VPC + PrivateLink | VPC flow logs |
-| Audit Logging | 15.1 | CloudTrail | S3 audit bucket |
+| Audit Logging & Monitoring | 12.2 | CloudTrail + CloudWatch | S3 audit bucket |
+
+TRM 15.1 (IT Audit) covers the independent audit function, which uses these logs as evidence; it is not the logging control itself. The matrix shows where controls support each TRM section. Each institution remains responsible for its own compliance assessment.
+
+> **Upcoming: proposed TRM Notice amendments (MAS Consultation Paper P012-2026, 10 June 2026, not yet finalised).** MAS proposes requiring a comprehensive IT asset inventory that includes open-source and third-party components (with direct and indirect dependencies), IT risk assessments that cover the IT supply chain and the use of AI, change-management controls that prevent unauthorised changes and test all changes to critical systems, and immutable or offline backups. For AI coding assistants, this means recording Kiro, its MCP servers and the dependencies it introduces in the asset inventory, and routing Kiro-generated changes through the normal change-management controls. ([consultation paper](https://www.mas.gov.sg/publications/consultations/2026/consultation-paper-on-proposed-amendments-to-notices-on-technology-risk-management))
 
 ### 8.2 Audit Trail Requirements
 
@@ -263,7 +267,7 @@ aws cloudtrail update-trail \
   --enable-log-file-validation
 ```
 
-**S3 Lifecycle Policy (90-day retention):**
+**S3 Lifecycle Policy (example institutional policy, not prescribed by MAS TRM: move to Glacier after 90 days, expire after ~7 years; set the expiry per your record-keeping obligations, commonly 5–7 years):**
 ```json
 {
   "Rules": [{
@@ -418,6 +422,8 @@ prohibited:
 | **Medium** | DLP policy violation | 4 hours |
 | **Low** | Failed authentication | 24 hours |
 
+These response times are example internal SLAs (institutional policy). Regulatory notification deadlines are separate; see Section 10.3.
+
 ### 10.2 MCP Server Compromise Response
 
 **Immediate Actions:**
@@ -455,8 +461,14 @@ aws secretsmanager rotate-secret --secret-id /banking/*
 
 **Notification:**
 - Security team: Immediate
-- Compliance team: Within 1 hour
-- MAS: Within 24 hours (if material breach)
+- Compliance team: Immediately, in parallel with the security team, so that a relevant-incident decision can be made inside the MAS 1-hour window
+- MAS (banks, [MAS Notice FSM-N05](https://www.mas.gov.sg/regulation/notices/notice-fsm-n05) para 7): as soon as possible, and **not later than 1 hour** after discovery of a relevant incident
+- MAS root cause and impact analysis report (FSM-N05 para 8): within **14 days** of discovery of the relevant incident, or a longer period if MAS allows
+- PDPC: if personal data is involved, run the PDPA breach assessment in Section 11.4 (separate clock)
+
+A **relevant incident** under FSM-N05 is a system malfunction or IT security incident that has a severe and widespread impact on the bank's operations or materially impacts the bank's service to its customers. Most Kiro-specific events (for example a DLP violation) will not meet this threshold, but a credential exposure or a compromised pipeline that affects critical systems or customer services could.
+
+> **Other FIs:** FSM-N05 applies to banks. Merchant banks and non-bank FIs follow their own sector TRM notice (for example FSM-N11 for merchant banks, FSM-N03 for insurers, FSM-N13 for designated payment systems and digital payment token service providers, FSM-N21 for capital markets FIs, FSM-N23 for licensed financial advisers). Verify the wording of your sector notice. The former sector notices (such as Notice 644) were cancelled with effect from 10 May 2024. The MAS Circular on FI incident reporting (effective 1 February 2026) changes the reporting template and channel, not the deadlines.
 
 ### 10.4 Escalation Matrix
 
@@ -464,8 +476,17 @@ aws secretsmanager rotate-secret --secret-id /banking/*
 Level 1: Developer → Team Lead (15 min)
 Level 2: Team Lead → Security Team (30 min)
 Level 3: Security Team → CISO (1 hour)
-Level 4: CISO → MAS (24 hours if required)
+Level 4: CISO → MAS (relevant incident: as soon as possible, ≤1 hour from discovery; RCA report ≤14 days)
 ```
+
+The MAS 1-hour clock runs from discovery, not from CISO escalation. If an incident may be a relevant incident, escalate Levels 1–4 in parallel rather than one after another.
+
+### 10.5 Availability and Recovery (MAS Notice FSM-N05 paras 5–6)
+
+Consider whether Kiro is part of a critical system. Usually it is not, but the CI/CD pipeline and repositories it writes to may be. For each critical system, banks must meet:
+
+- **Availability (para 5):** maximum unscheduled downtime of 4 hours in any 12-month period.
+- **Recovery (para 6):** recovery time objective (RTO) of no more than 4 hours, validated at least once every 12 months.
 
 ---
 
@@ -581,6 +602,7 @@ aws workspaces reboot-workspaces --reboot-workspace-requests WorkspaceId=ws-xxxx
 
 | PDPA Obligation | Kiro Context | Implementation |
 |-----------------|--------------|----------------|
+| **Accountability** | The organisation is responsible for personal data in its possession or under its control, including data that Kiro/AWS processes on its behalf | Designated DPO; data protection policies that cover AI-assisted development |
 | **Consent** | Code processing personal data must have valid consent basis | Kiro prompts should reference consent requirements |
 | **Purpose Limitation** | Personal data used only for stated purposes | DLP policies block unauthorized data access |
 | **Notification** | Individuals informed of data collection purposes | Audit logs track what data Kiro accesses |
@@ -589,7 +611,9 @@ aws workspaces reboot-workspaces --reboot-workspace-requests WorkspaceId=ws-xxxx
 | **Protection** | Reasonable security to protect personal data | Encryption, DLP, VPC isolation |
 | **Retention Limitation** | Data not kept longer than necessary | Kiro prompt logs subject to retention policy |
 | **Transfer Limitation** | Cross-border transfer restrictions | Data residency in ap-southeast-1 (Singapore) |
-| **Data Breach Notification** | Notify PDPC within 3 calendar days of assessment | Incident response plan must include PDPC notification |
+| **Data Breach Notification** | Assess expeditiously whether a breach is notifiable; notify PDPC no later than 3 calendar days after determining it is notifiable (see 11.4) | Incident response plan must include PDPC notification |
+
+- **Transfer Limitation Obligation (PDPA s26):** if personal data is transferred outside Singapore (for example, personal data in prompts or code context that Kiro processes in another region; see Section 7.2), the organisation must ensure the recipient protects it to a standard comparable to the PDPA. Under the PDP Regulations 2021 this is done through legally enforceable obligations (such as contract clauses that specify the destination countries, or binding corporate rules), specified certifications (APEC/Global CBPR, or PRP for data intermediaries), or one of the deemed-compliance cases. The organisation remains responsible when its data intermediary or cloud provider transfers the data overseas (PDPC Advisory Guidelines on Key Concepts, ch. 19).
 
 ### 11.2 PDPA Controls for Kiro Environments
 
@@ -648,41 +672,57 @@ aws workspaces reboot-workspaces --reboot-workspace-requests WorkspaceId=ws-xxxx
 }
 ```
 
+> **NRIC used for authentication:** in a joint advisory (PDPC press release, 2 February 2026), PDPC and CSA advised that organisations cease using NRIC numbers for authentication by **31 December 2026**. Code reviews of Kiro-generated code should flag any use of an NRIC number as a password, default password or other authenticator. The PDPC Advisory Guidelines on NRIC and other national identification numbers (31 August 2018) continue to apply to collection, use and disclosure.
+
 ### 11.3 PDPA Compliance Checklist for Kiro
 
 - [ ] Data classification policy defined for AI-assisted development
 - [ ] DLP rules enforce PDPA data categories in Kiro prompts
 - [ ] Developer training covers PDPA obligations when using AI tools
-- [ ] Prompt logging enabled with PDPA-compliant retention (max 5 years)
+- [ ] Prompt logging enabled with a documented, purpose-based retention period (PDPA s25 sets no fixed maximum; keep logs only as long as needed for legal or business purposes)
 - [ ] Data residency confirmed in Singapore region (ap-southeast-1)
 - [ ] Cross-region inference disabled for PDPA-regulated workloads
-- [ ] Data breach notification process includes PDPC (3-day assessment window)
+- [ ] Transfer limitation (s26) safeguards documented for any personal data processed outside Singapore
+- [ ] Data breach notification process includes PDPC (assessment generally within 30 days; notify PDPC ≤3 calendar days after determining the breach is notifiable)
+- [ ] Code review flags NRIC numbers used for authentication (cease by 31 December 2026)
 - [ ] Privacy impact assessment completed for Kiro deployment
 - [ ] Data intermediary obligations assessed (Kiro/AWS as data intermediary)
 
 ### 11.4 PDPA Breach Notification
 
-**Timeline (per PDPA Amendment 2020):**
+**Timeline (PDPA Part 6A, introduced by the PDPA Amendment 2020; PDPC Advisory Guidelines on Key Concepts, ch. 20):**
 
 ```
 Data breach discovered
-  └─ Assess within 30 calendar days if breach is notifiable
-     └─ If notifiable (significant harm or ≥500 individuals):
-        └─ Notify PDPC within 3 calendar days of assessment
-        └─ Notify affected individuals as soon as practicable
+  └─ Assess expeditiously whether the breach is notifiable
+     (PDPC guidance: generally within 30 calendar days)
+     └─ Notifiable if EITHER test is met:
+        (a) significant harm: prescribed classes of personal data in the
+            PDP (Notification of Data Breaches) Regulations 2021, or
+        (b) significant scale: 500 or more affected individuals
+        └─ Notify PDPC as soon as practicable, no later than
+           3 calendar days after determining the breach is notifiable
+        └─ Notify affected individuals as soon as practicable, at the same
+           time as or after notifying PDPC (where significant harm is likely)
 ```
 
 **Integration with Incident Response (Section 10):**
 - Severity "Critical" and "High" incidents must trigger PDPA breach assessment
-- Security team must assess PDPA notification requirements alongside MAS reporting
+- Security team must assess PDPA notification requirements alongside MAS reporting (the MAS 1-hour and PDPC 3-day clocks run independently)
 
 ---
 
-## 12. MAS Outsourcing Guidelines Compliance
+## 12. MAS Outsourcing and Third-Party Services
 
 ### 12.1 Kiro as an Outsourced Service
 
-**Context:** AWS Kiro is an AWS-managed AI development service. Under MAS Guidelines on Outsourcing (2018 revision), financial institutions must assess and manage risks associated with outsourcing material arrangements to third-party service providers.
+**Context:** AWS Kiro is an AWS-managed AI development service. Each financial institution must assess whether using it is an outsourcing arrangement and, if so, whether it is material, under the current MAS outsourcing regime (effective 11 December 2024):
+
+- **Banks:** [MAS Notice 658](https://www.mas.gov.sg/regulation/notices/notice-658) (Management of Outsourced Relevant Services for Banks) and the [Guidelines on Outsourcing (Banks)](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-outsourcing-banks) (Annex 2 covers cloud computing). Merchant banks: Notice 1121.
+- **Other FIs:** [Guidelines on Outsourcing (Financial Institutions other than Banks)](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-outsourcing-financial-institutions-other-than-banks) (last revised 24 January 2025; Annex 5 covers cloud computing).
+- The previous Guidelines on Outsourcing (July 2016, revised October 2018) are cancelled; they applied only until 10 December 2024. Do not rely on their section numbers.
+
+**Third-party services (MAS TRM 3.4):** TRM 3.4 (Management of Third Party Services) applies whether or not Kiro is an outsourcing arrangement. TRM 3.4.1 recognises that not every third-party service constitutes outsourcing, so perform and document a materiality assessment instead of assuming either outcome. The same applies to MCP servers and to the model providers behind Kiro.
 
 **Outsourcing Classification:**
 
@@ -698,12 +738,13 @@ Data breach discovered
 
 | MAS Outsourcing Requirement | Kiro Implementation | Evidence |
 |-----------------------------|---------------------|----------|
-| **Risk Assessment** | Technology risk assessment of Kiro deployment | Risk register entry |
-| **Due Diligence** | AWS compliance certifications (SOC 2, ISO 27001) | AWS Artifact reports |
+| **Materiality & Risk Assessment** | Materiality assessment plus technology risk assessment of Kiro deployment | Risk register entry |
+| **Third-Party Services (TRM 3.4)** | Third-party risk management for Kiro, MCP servers and model providers, even where not outsourcing | Third-party register entry |
+| **Due Diligence** | Review AWS assurance reports and confirm which ones cover Kiro (see 12.3) | AWS Artifact reports |
 | **Contractual Protections** | AWS Enterprise Agreement / Addendum | Legal review |
 | **Data Protection** | Encryption, DLP, VPC isolation, data residency | Technical controls documented |
 | **Business Continuity** | Fallback to non-AI development if Kiro unavailable | BCP documentation |
-| **Audit Rights** | AWS compliance reports via AWS Artifact | Quarterly review |
+| **Audit and Access Rights** | Contractual audit and access rights for the FI and MAS; AWS compliance reports via AWS Artifact | Quarterly review |
 | **Concentration Risk** | Assess dependency on single AI coding tool | Risk assessment |
 | **Sub-outsourcing** | AWS use of Amazon Bedrock foundation models | Sub-contractor review |
 | **Exit Strategy** | Ability to operate SDLC without Kiro | Documented procedures |
@@ -711,10 +752,13 @@ Data breach discovered
 
 ### 12.3 Due Diligence Checklist
 
-- [ ] AWS SOC 2 Type II report reviewed (via AWS Artifact)
-- [ ] AWS ISO 27001 certification verified
-- [ ] AWS CSA STAR certification checked
-- [ ] AWS MTCS (Multi-Tier Cloud Security) Level 3 confirmed for Singapore
+> **Scope check:** Kiro's own [compliance validation page](https://kiro.dev/docs/privacy-and-security/compliance-validation/) lists only HIPAA eligibility and inclusion in AWS's ISO/IEC 27001:2022 scope. Do not assume AWS SOC 2 / MTCS L3 reports cover Kiro; check AWS Artifact and the AWS services-in-scope pages.
+
+- [ ] Materiality assessment documented (outsourcing or other third-party service; TRM 3.4.1)
+- [ ] AWS SOC 2 Type II report reviewed (via AWS Artifact) and Kiro scope checked
+- [ ] AWS ISO/IEC 27001 certificate reviewed and Kiro scope checked
+- [ ] AWS CSA STAR scope checked for Kiro
+- [ ] AWS MTCS (Multi-Tier Cloud Security) Level 3 scope checked for Kiro (do not assume coverage)
 - [ ] Data processing agreement (DPA) in place with AWS
 - [ ] Sub-processor list reviewed (Bedrock model providers)
 - [ ] Service Level Agreement (SLA) reviewed for Kiro availability
@@ -741,11 +785,11 @@ If Kiro service discontinued or contract terminated:
 
 ---
 
-## 13. AI/ML Governance: MAS FEAT Principles
+## 13. AI/ML Governance: MAS FEAT Principles and AI Risk Management Guidelines
 
 ### 13.1 FEAT Framework for AI-Assisted Development
 
-The Monetary Authority of Singapore published the **Fairness, Ethics, Accountability, and Transparency (FEAT)** principles to guide the responsible use of Artificial Intelligence and Data Analytics (AIDA) in financial services. These principles apply to the use of Kiro (AI-powered development assistant) in banking SDLC environments.
+The Monetary Authority of Singapore published the **Principles to Promote Fairness, Ethics, Accountability and Transparency (FEAT) in the Use of Artificial Intelligence and Data Analytics in Singapore's Financial Sector** (12 November 2018; para 1.4 revised 7 February 2019). FEAT applies to AI and data analytics (AIDA) used in decision-making in the provision of financial products and services. It is not a direct requirement for coding assistants. This guide applies the FEAT principles **by analogy** to AI-assisted development with Kiro, and more directly to code that Kiro helps build for customer-facing decision systems (for example credit scoring or pricing). FEAT is non-prescriptive, so calibrate these controls to materiality. For MAS's supervisory expectations on AI risk management, which cover all forms of AI including generative AI and AI agents, see Section 13.5.
 
 | FEAT Principle | Application to Kiro | Controls |
 |----------------|---------------------|----------|
@@ -792,7 +836,7 @@ aws q put-prompt-logging-configuration \
 - MCP tool invocations and parameters
 - User identity and session context
 
-**Audit Trail Retention:** Minimum 7 years for financial services (aligned with MAS record-keeping requirements).
+**Audit Trail Retention:** Example institutional policy (not prescribed by MAS TRM): set the retention period per your record-keeping obligations (commonly 5–7 years).
 
 ### 13.4 Fairness & Bias Considerations
 
@@ -816,6 +860,28 @@ guidelines:
   - "Alert if ML model inputs include demographic proxies"
 ```
 
+### 13.5 MAS Guidelines on AI Risk Management (2026)
+
+MAS published the final [Guidelines on Artificial Intelligence Risk Management](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-artificial-intelligence-risk-management-for-financial-institutions) for financial institutions on **7 October 2026**, after consultation paper P017-2025 (13 November 2025).
+
+- **Effective dates (para 1.8):** Sections 3–4 from 7 October 2027; Sections 5–6 by 7 October 2028.
+- **Scope:** all FIs and all forms of AI, explicitly including generative AI / LLMs and AI agents (response paper para 2.8). The FEAT principles continue to apply (para 1.2).
+- **Proportionality (para 2.3):** an FI may apply only basic AI governance policies where poor performance or unavailability of the AI tool is unlikely to have a material adverse impact; otherwise the full set of expectations (Sections 3–6) applies.
+- **Coding assistants are not among the basic-tier examples.** Para 2.4 lists emails, summarising, document review, formulas/charts, image generation and internal chatbots. Kiro is an agentic coding assistant that writes and executes code, so assess its materiality yourself; do not assume the basic tier.
+- **Footnote 12:** for copilots that assist in writing, some life-cycle controls may be less relevant, but controls on data management, safety and cybersecurity remain relevant and should be applied proportionately.
+- **Para 2.5(b)** gives an example basic policy: prohibit inputting confidential, proprietary or client information into public AI tools. The prompt data classification in Section 11.2 supports this.
+- **Agentic AI:** MAS will consult separately on additional guidance for agentic AI (response paper para 12.9). IMDA's Model AI Governance Framework for Agentic AI is cited as a reference.
+
+**How this guide's controls support the Guidelines' themes:**
+
+| Guidelines theme | Supporting controls in this guide | Section |
+|------------------|-----------------------------------|---------|
+| Governance and oversight | Senior management oversight of AI tool adoption (TRM 3.1); named owner for Kiro; AI usage policy | 12.1, 13.2 |
+| AI inventory and risk materiality | Record Kiro, its models, MCP servers and custom agents in the AI inventory; document the para 2.3 materiality assessment | 12.1, 12.3 |
+| Data management | Prompt data classification, DLP rules, PDPA controls | 11.1–11.3 |
+| Safety and cybersecurity | MCP allowlist, network isolation, VDI, monitoring, penetration testing | 5, 8, 14; Part 1, Sections 3–4 |
+| Human oversight / review of AI-generated code | Human review before merge, code review gates (TRM 6.1, 6.3), prompt logging | 6.3, 13.2, 13.3 |
+
 ---
 
 ## 14. Industry Standards: ABS Guidelines
@@ -827,14 +893,14 @@ The **Association of Banks in Singapore (ABS)** published the Cloud Computing Im
 | ABS Requirement | Kiro Implementation |
 |-----------------|---------------------|
 | Data classification before cloud adoption | Classify code/data touched by Kiro per bank's data policy |
-| Cloud service provider due diligence | AWS due diligence (SOC 2, ISO 27001, MTCS L3) |
+| Cloud service provider due diligence | AWS due diligence; confirm which assurance reports cover Kiro (Section 12.3) |
 | Data residency and sovereignty | Configure ap-southeast-1, disable cross-region inference |
 | Access control and identity management | IAM Identity Center + Enterprise IdP + MFA |
 | Encryption requirements | TLS 1.2+ in transit, KMS at rest |
 | Incident management | Incident response plan (Section 10) |
 | Exit strategy | Documented exit plan (Section 12.4) |
 
-### 14.2 ABS Penetration Testing Guidelines
+### 14.2 Penetration Testing (MAS TRM 13.2; ABS Penetration Testing Guidelines)
 
 **Relevance:** If Kiro environments (WorkSpaces, VPC endpoints, MCP servers) are in scope for penetration testing:
 
@@ -845,7 +911,7 @@ The **Association of Banks in Singapore (ABS)** published the Cloud Computing Im
 
 ### 14.3 ABS Red Team Guidelines
 
-**Applicability:** For adversarial attack simulation of Kiro environments:
+**Applicability:** For adversarial attack simulation of Kiro environments (MAS TRM 13.4):
 
 - Test if attackers can bypass MCP server restrictions
 - Test if DLP controls can be circumvented via AI prompts
@@ -858,32 +924,43 @@ The **Association of Banks in Singapore (ABS)** published the Cloud Computing Im
 
 ### Comprehensive Regulatory Mapping
 
+TRM section numbers follow the MAS Technology Risk Management Guidelines (January 2021). Each row shows where this guide's controls support a requirement; each institution remains responsible for its own compliance assessment.
+
 | Regulation | Section | Control Area | Kiro Implementation | Document Reference |
 |------------|---------|--------------|---------------------|-------------------|
-| **MAS TRM** | 3.1 | Governance & Oversight | IAM IDC + Enterprise IdP | Part 1, Section 2 |
-| **MAS TRM** | 5.1 | IT Project Management | Supervised mode + code review | Part 2, Section 6 |
-| **MAS TRM** | 5.2 | Security-by-Design | Skills + steering files | Skills Guide |
-| **MAS TRM** | 6.1 | Software Development | SDLC security controls | Part 2, Section 6 |
-| **MAS TRM** | 7.1 | IT Service Management | Change management workflow | Part 2, Section 6.3 |
-| **MAS TRM** | 9.1 | Access Control | MFA + session management + RBAC | Part 1, Section 2.1.3 |
-| **MAS TRM** | 9.3 | Remote Access | VPC + PrivateLink | Part 1, Section 3 |
-| **MAS TRM** | 10.1 | Cryptography | TLS 1.2+ in transit, KMS at rest | Part 2, Section 7 |
+| **MAS TRM** | 3.1, 3.2 | Governance & Oversight; Policies | Senior management oversight of Kiro adoption + AI usage policy | Part 2, Section 13.5 |
+| **MAS TRM** | 3.4 | Management of Third Party Services | Kiro, MCP servers and model providers assessed as third-party services | Part 2, Section 12 |
+| **MAS TRM** | 3.6 | Security Awareness and Training | Developer training on Kiro, MCP and PDPA | Part 2, Section 9.1 |
+| **MAS TRM** | 5.4 | SDLC and Security-by-Design | Skills + steering files | Skills Guide |
+| **MAS TRM** | 6.1 | Secure Coding, Source Code Review and Application Security Testing | Code review of AI-generated code (incl. third-party/open-source code, 6.1.3) + secret scanning | Part 2, Section 6 |
+| **MAS TRM** | 6.3 | DevSecOps Management | Supervised mode + human approval before merge (segregation of duties) | Part 2, Section 6 |
+| **MAS TRM** | 7.5 | Change Management | Change management workflow | Part 2, Section 6.3 |
+| **MAS TRM** | 9.1 | User Access Management | Enterprise IdP + IAM IDC + MFA + session management + RBAC | Part 1, Section 2 |
+| **MAS TRM** | 9.3 | Remote Access Management | WorkSpaces VDI as the remote access path | Part 1, Section 4 |
+| **MAS TRM** | 10.1 | Cryptographic Algorithm and Protocol | TLS 1.2+ in transit | Part 2, Section 7 |
+| **MAS TRM** | 10.2 | Cryptographic Key Management | KMS customer-managed keys + rotation | Part 2, Section 7.1 |
 | **MAS TRM** | 11.1 | Data Security | DLP + encryption + PDPA controls | Part 1, Section 4.1.3 |
-| **MAS TRM** | 11.2 | Network Security | VPC endpoints + SG + NACLs | Part 1, Section 3.2 |
-| **MAS TRM** | 11.5 | IoT/Endpoint | WorkSpaces VDI hardening | Part 1, Section 4 |
-| **MAS TRM** | 12.1 | Cyber Threat Intel | CloudWatch + monitoring | Part 2, Section 8 |
+| **MAS TRM** | 11.2 | Network Security | VPC endpoints + PrivateLink + SG + NACLs | Part 1, Section 3 |
+| **MAS TRM** | 11.3, 11.4 | System Security; Virtualisation Security | WorkSpaces VDI hardening | Part 1, Section 4 |
+| **MAS TRM** | 12.2 | Cyber Event Monitoring and Detection | CloudTrail + CloudWatch + monitoring | Part 2, Section 8 |
 | **MAS TRM** | 12.3 | Incident Response | Escalation matrix + MAS notification | Part 2, Section 10 |
 | **MAS TRM** | 13.1 | Vulnerability Assessment | Annual VA of Kiro environments | Part 2, Section 14.2 |
 | **MAS TRM** | 13.2 | Penetration Testing | Annual PT of VPC + WorkSpaces | Part 2, Section 14.2 |
+| **MAS TRM** | 13.4 | Adversarial Attack Simulation Exercise | Red team of Kiro environments | Part 2, Section 14.3 |
 | **MAS TRM** | 14.1 | Online Financial Services | Not directly applicable (dev tool) | N/A |
-| **MAS TRM** | 15.1 | IT Audit | CloudTrail + compliance validation | Part 2, Section 8 |
-| **PDPA** | Part IV | Data Protection | DLP + data classification + encryption | Part 2, Section 11 |
-| **PDPA** | Part VIA | Data Breach | 3-day PDPC notification | Part 2, Section 11.4 |
-| **MAS Outsourcing** | 4.1 | Risk Assessment | Outsourcing risk register | Part 2, Section 12 |
-| **MAS Outsourcing** | 5.1 | Due Diligence | AWS compliance certifications | Part 2, Section 12.3 |
-| **MAS Outsourcing** | 8.1 | Exit Strategy | Documented transition plan | Part 2, Section 12.4 |
-| **MAS FEAT** | All | AI Governance | FEAT controls for Kiro | Part 2, Section 13 |
+| **MAS TRM** | 15.1 | IT Audit | Independent IT audit of Kiro controls, using CloudTrail logs and compliance reports as evidence | Part 2, Section 8 |
+| **MAS Notice FSM-N05** (banks) | paras 5–8 | Availability, recovery, incident notification | ≤4h downtime / RTO ≤4h for critical systems; notify MAS ≤1h; RCA report ≤14 days | Part 2, Section 10 |
+| **PDPA** | s11–12 | Accountability | DPO + data protection policies covering AI-assisted development | Part 2, Section 11.1 |
+| **PDPA** | s24 (Protection), s25 (Retention), s26 (Transfer Limitation) | Care of Personal Data (Part 6) | DLP + data classification + encryption + purpose-based retention + transfer safeguards | Part 2, Section 11 |
+| **PDPA** | Part 6A | Data Breach Notification | Assess (generally ≤30 days); notify PDPC ≤3 calendar days after determining notifiable | Part 2, Section 11.4 |
+| **MAS Outsourcing** | Materiality & risk assessment | Risk Assessment | Materiality assessment + outsourcing/third-party risk register | Part 2, Section 12 |
+| **MAS Outsourcing** | Due diligence | Due Diligence | Review AWS assurance reports; confirm Kiro is in scope | Part 2, Section 12.3 |
+| **MAS Outsourcing** | Exit / termination | Exit Strategy | Documented transition plan | Part 2, Section 12.4 |
+| **MAS FEAT** | All | AI Governance (applied by analogy) | FEAT controls for Kiro | Part 2, Section 13 |
+| **MAS AI Risk Management Guidelines** | Sections 3–6 | AI governance, inventory, materiality, life-cycle controls | Proportionate controls for Kiro | Part 2, Section 13.5 |
 | **ABS Cloud** | All | Cloud Security | Defense-in-depth for Kiro | Part 2, Section 14.1 |
+
+"MAS Outsourcing" means MAS Notice 658 and the Guidelines on Outsourcing (Banks) for banks, and the Guidelines on Outsourcing (Financial Institutions other than Banks) for other FIs, all effective 11 December 2024. Requirements are cited by topic because the section numbers of the cancelled 2016/2018 guidelines no longer apply.
 
 ---
 
@@ -894,7 +971,7 @@ The **Association of Banks in Singapore (ABS)** published the Cloud Computing Im
 - Sections 5-10: MCP Governance, SDLC, Data Protection, Compliance, Operations, Incident Response (Part 2)
 - Sections 11-14: PDPA, Outsourcing, AI/ML Governance, ABS Industry Standards (Part 2, Enhanced)
 
-**Implementation Ready:** All sections include production-ready configurations, scripts, and compliance mappings for Singapore banking environments.
+**Reference Material:** All sections include reference configurations, scripts, and compliance mappings for Singapore banking environments. They are designed to support alignment with MAS and PDPA expectations and are not a substitute for your own testing; each institution remains responsible for its own compliance assessment.
 
 ---
 

@@ -7,11 +7,11 @@ import { NagSuppressions } from 'cdk-nag';
 import { KiroBankingConfig } from '../../config/environments';
 
 /**
- * Backup Stack: AWS Backup vault and plan for business continuity.
+ * Backup Stack: AWS Backup vault and plan for system backup and recovery.
  *
- * MAS TRM Section 8 (Business Continuity):
+ * MAS TRM Section 8 (IT Resilience), 8.4 (System Backup and Recovery):
  * - Daily automated backups with 35-day retention
- * - Encrypted backup vault with customer-managed KMS key
+ * - Encrypted backup vault with customer-managed KMS key (TRM 10.2)
  * - Supports regulatory data retention requirements
  */
 export interface BackupStackProps extends cdk.StackProps {
@@ -27,7 +27,7 @@ export class BackupStack extends cdk.Stack {
     // --- KMS Key for Backup Vault Encryption ---
     const backupKey = new kms.Key(this, 'BackupVaultKey', {
       alias: `kiro-banking-backup-key-${config.environment}`,
-      description: 'KMS key for encrypting AWS Backup vault (MAS TRM Section 8)',
+      description: 'KMS key for encrypting AWS Backup vault (MAS TRM 8.4, 10.2)',
       enableKeyRotation: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });

@@ -1,7 +1,7 @@
 # Building Kiro Skills for Banking Developers
 ## MAS Compliance & Singapore Banking Best Practices
 
-> **Audience:** developers building Kiro Skills · **Purpose:** build MAS-compliant banking Skills (with working examples in `.kiro/skills/`) · **Prerequisites:** basic familiarity with Kiro Skills · ↩ [README](README.md)
+> **Audience:** developers building Kiro Skills · **Purpose:** build MAS-aligned banking Skills (with working examples in `.kiro/skills/`) · **Prerequisites:** basic familiarity with Kiro Skills · ↩ [README](README.md)
 
 ---
 
@@ -32,14 +32,14 @@ Skills are portable instruction packages that teach Kiro how to handle banking-s
 **Example Skills:**
 - `banking-code-review` - Code review with banking standards
 - `deployment-approval` - Multi-stage approval workflow
-- `change-management` - MAS-compliant change procedures
+- `change-management` - MAS-aligned change procedures
 - `incident-response` - Security incident handling
 
 ### Category 3: Documentation Skills
 **Purpose:** Regulatory documentation generation
 
 **Example Skills:**
-- `mas-documentation` - Generate MAS-compliant docs
+- `mas-documentation` - Generate MAS-aligned documentation
 - `audit-report` - Create audit trail reports
 - `risk-assessment` - Generate risk assessment docs
 - `compliance-checklist` - Automated compliance validation
@@ -129,7 +129,7 @@ bash scripts/validate_change_mgmt.sh
 - Rollback procedures
 - Emergency change process
 
-### 4. PII Detection (MAS Section 11)
+### 4. PII Detection (MAS Section 11.1)
 ```bash
 python scripts/scan_pii.py --path ./src --output report.json
 ```
@@ -145,9 +145,9 @@ python scripts/scan_pii.py --path ./src --output report.json
 | MAS Section | Control | Status | Evidence |
 |-------------|---------|--------|----------|
 | 9.1 | Access Control | ✓ | IAM policies reviewed |
-| 10.1 | Encryption | ✓ | TLS 1.2+ + KMS verified |
+| 10.1, 10.2 | Cryptography | ✓ | TLS 1.2+ + KMS verified |
 | 11.1 | Data Security | ✓ | DLP policies active |
-| 15.1 | Audit Logging | ✓ | CloudTrail enabled |
+| 12.2 | Audit Logging (Cyber Event Monitoring and Detection) | ✓ | CloudTrail enabled |
 
 ## Output Format
 
@@ -217,7 +217,7 @@ For compliance violations:
 1. Document in audit report
 2. Notify Security Team immediately
 3. Block deployment if critical
-4. Report to MAS if material breach (within 24 hours)
+4. Notify MAS not later than 1 hour after discovery of a relevant incident (MAS Notice FSM-N05 para 7; root-cause and impact analysis report within 14 days, para 8)
 ```
 
 ---
@@ -281,9 +281,9 @@ description: Conduct code reviews following Singapore banking security standards
 
 ## Review Checklist
 
-### 1. Security (MAS Section 10)
+### 1. Secure Coding (MAS Section 6.1)
 - [ ] No hardcoded credentials
-- [ ] TLS 1.2+ for all connections (TLS 1.3 recommended)
+- [ ] TLS 1.2+ for all connections (TLS 1.3 recommended) (MAS Section 10.1)
 - [ ] Input validation on all user inputs
 - [ ] SQL injection prevention (parameterized queries)
 - [ ] XSS prevention (output encoding)
@@ -291,20 +291,20 @@ description: Conduct code reviews following Singapore banking security standards
 ### 2. Access Control (MAS Section 9)
 - [ ] MFA enforced for privileged operations
 - [ ] Least privilege principle applied
-- [ ] Session timeout configured (15 minutes)
-- [ ] Failed login attempt lockout (3 attempts)
+- [ ] Session timeout configured (example institutional policy, not prescribed by MAS TRM: 15 minutes)
+- [ ] Failed login attempt lockout (example institutional policy, not prescribed by MAS TRM: 3 attempts)
 
-### 3. Data Protection (MAS Section 11)
+### 3. Data Protection (MAS Section 11.1)
 - [ ] PII encrypted at rest (KMS)
 - [ ] PII encrypted in transit (TLS 1.2+)
 - [ ] Data retention policy enforced
 - [ ] Secure deletion implemented
 
-### 4. Audit & Logging (MAS Section 15)
+### 4. Audit & Logging (MAS Section 12.2)
 - [ ] All financial transactions logged
 - [ ] CloudTrail enabled
 - [ ] Log integrity protected
-- [ ] 90-day retention minimum
+- [ ] 90-day retention minimum (example institutional policy, not prescribed by MAS TRM)
 
 ### 5. Error Handling
 - [ ] No sensitive data in error messages
@@ -338,7 +338,7 @@ account = Account.objects.get(id=account_id, user=request.user)
 ## Approval Criteria
 - All security checks passed
 - No critical vulnerabilities
-- MAS compliance validated
+- MAS TRM alignment checks passed (see the checklist above)
 - Code review approved by 2+ reviewers
 ```
 
@@ -463,7 +463,7 @@ graph TD
 |------------|-------|-------------|--------|--------------|
 | mas-compliance-review | Security Team | All | Active | 2026-02-25 |
 | pii-detection | Data Protection | 11.1 | Active | 2026-02-20 |
-| banking-code-review | Dev Team | 9, 10, 11 | Active | 2026-02-15 |
+| banking-code-review | Dev Team | 6.1, 9, 10, 11 | Active | 2026-02-15 |
 | deployment-approval | DevOps | 7.5 | Active | 2026-02-10 |
 
 ---
@@ -556,12 +556,13 @@ All skills run automatically in sequence. Pipeline fails if any skill reports cr
 
 | Section | Topic | Skill Coverage |
 |---------|-------|----------------|
-| 5 | System Development | banking-code-review |
+| 5.4 | System Development Life Cycle and Security-By-Design | banking-code-review |
+| 6.1 | Secure Coding, Source Code Review and Application Security Testing | banking-code-review |
 | 7.5 | Change Management | deployment-approval |
 | 9 | Access Control | mas-compliance-review |
-| 10 | Encryption | encryption-validator |
-| 11 | Data Security | pii-detection |
-| 15 | Audit Logging | audit-report |
+| 10 | Cryptography | encryption-validator |
+| 11 | Data and Infrastructure Security | pii-detection |
+| 12.2 | Cyber Event Monitoring and Detection (audit logging; evidence for the 15.1 IT audit function) | audit-report |
 
 ---
 
@@ -602,4 +603,4 @@ EOF
 
 ---
 
-**Document Complete:** Banking developers now have comprehensive guidance for building MAS-compliant Kiro Skills with security-first practices and regulatory compliance built-in.
+**Document Complete:** Banking developers now have guidance for building MAS-aligned Kiro Skills with security-first practices. Each institution remains responsible for its own compliance assessment.

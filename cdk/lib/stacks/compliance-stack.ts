@@ -6,17 +6,22 @@ import { Construct } from 'constructs';
 import { KiroBankingConfig } from '../../config/environments';
 
 /**
- * Compliance Stack: AWS Config rules for continuous MAS TRM compliance.
+ * Compliance Stack: AWS Config rules for continuous monitoring of controls
+ * aligned with the MAS TRM Guidelines.
  *
- * Implements automated compliance checks mapped to MAS TRM Guidelines:
- * - Section 9: Access Control
- * - Section 10: Cryptography
- * - Section 11: Data & Network Security
- * - Section 15: IT Audit
+ * Implements automated configuration checks mapped to MAS TRM Guidelines:
+ * - 9.1 / 9.2: User and privileged access management
+ * - 10.1 / 10.2: Cryptographic protocols and key management
+ * - 11.1 / 11.2: Data and network security
+ * - 12.2: Cyber event monitoring and detection (audit logging; the logs serve
+ *   as evidence for the independent IT audit function, TRM 15.1)
  *
  * Also covers:
  * - PDPA: Data protection controls
- * - MAS Outsourcing: Third-party service monitoring
+ *
+ * Note: the AWS Config rule names (e.g. mas-trm-15-*) keep their original
+ * numbering so that deployed rules are not replaced. The rule description
+ * carries the current TRM mapping.
  */
 export interface ComplianceStackProps extends cdk.StackProps {
   readonly config: KiroBankingConfig;
@@ -36,7 +41,7 @@ export class ComplianceStack extends cdk.Stack {
     new config.ManagedRule(this, 'IamRootAccessKeyCheck', {
       identifier: 'IAM_ROOT_ACCESS_KEY_CHECK',
       configRuleName: `mas-trm-9-iam-root-key-${envConfig.environment}`,
-      description: 'MAS TRM 9.1: Ensure root account does not have access keys',
+      description: 'MAS TRM 9.2: Ensure root account does not have access keys',
     });
 
     // MFA enabled for IAM console access
@@ -50,14 +55,14 @@ export class ComplianceStack extends cdk.Stack {
     new config.ManagedRule(this, 'RootAccountMfa', {
       identifier: 'ROOT_ACCOUNT_MFA_ENABLED',
       configRuleName: `mas-trm-9-root-mfa-${envConfig.environment}`,
-      description: 'MAS TRM 9.1: Ensure root account has MFA enabled',
+      description: 'MAS TRM 9.2: Ensure root account has MFA enabled',
     });
 
     // IAM password policy
     new config.ManagedRule(this, 'IamPasswordPolicy', {
       identifier: 'IAM_PASSWORD_POLICY',
       configRuleName: `mas-trm-9-password-policy-${envConfig.environment}`,
-      description: 'MAS TRM 9.1: Ensure IAM password policy meets banking standards',
+      description: 'MAS TRM 9.1: Ensure IAM password policy is set per institutional password policy',
       inputParameters: {
         RequireUppercaseCharacters: 'true',
         RequireLowercaseCharacters: 'true',
@@ -84,7 +89,7 @@ export class ComplianceStack extends cdk.Stack {
     new config.ManagedRule(this, 'KmsKeyRotation', {
       identifier: 'CMK_BACKING_KEY_ROTATION_ENABLED',
       configRuleName: `mas-trm-10-kms-rotation-${envConfig.environment}`,
-      description: 'MAS TRM 10.1: Ensure KMS customer-managed key rotation is enabled',
+      description: 'MAS TRM 10.2: Ensure KMS customer-managed key rotation is enabled',
     });
 
     // ═══════════════════════════════════════════════════════════
@@ -122,7 +127,7 @@ export class ComplianceStack extends cdk.Stack {
     new config.ManagedRule(this, 'VpcFlowLogsEnabled', {
       identifier: 'VPC_FLOW_LOGS_ENABLED',
       configRuleName: `mas-trm-11-vpc-flow-logs-${envConfig.environment}`,
-      description: 'MAS TRM 11.2: Ensure VPC flow logs are enabled for network monitoring',
+      description: 'MAS TRM 11.2 / 12.2: Ensure VPC flow logs are enabled for network monitoring',
     });
 
     // Security groups: no unrestricted SSH
@@ -147,28 +152,29 @@ export class ComplianceStack extends cdk.Stack {
     });
 
     // ═══════════════════════════════════════════════════════════
-    // MAS TRM Section 15: IT Audit
+    // MAS TRM 12.2: Cyber Event Monitoring and Detection (audit logging)
+    // The logs serve as evidence for the IT audit function (TRM 15.1).
     // ═══════════════════════════════════════════════════════════
 
     // CloudTrail enabled
     new config.ManagedRule(this, 'CloudTrailEnabled', {
       identifier: 'CLOUD_TRAIL_ENABLED',
       configRuleName: `mas-trm-15-cloudtrail-enabled-${envConfig.environment}`,
-      description: 'MAS TRM 15.1: Ensure CloudTrail is enabled for audit logging',
+      description: 'MAS TRM 12.2: Ensure CloudTrail is enabled for audit logging (evidence for the TRM 15.1 IT audit function)',
     });
 
     // CloudTrail log file validation
     new config.ManagedRule(this, 'CloudTrailLogValidation', {
       identifier: 'CLOUD_TRAIL_LOG_FILE_VALIDATION_ENABLED',
       configRuleName: `mas-trm-15-log-validation-${envConfig.environment}`,
-      description: 'MAS TRM 15.1: Ensure CloudTrail log file integrity validation is enabled',
+      description: 'MAS TRM 12.2: Ensure CloudTrail log file integrity validation is enabled',
     });
 
     // CloudTrail encrypted
     new config.ManagedRule(this, 'CloudTrailEncrypted', {
       identifier: 'CLOUD_TRAIL_ENCRYPTION_ENABLED',
       configRuleName: `mas-trm-15-cloudtrail-encrypted-${envConfig.environment}`,
-      description: 'MAS TRM 15.1/10.1: Ensure CloudTrail logs are encrypted with KMS',
+      description: 'MAS TRM 12.2/10.2: Ensure CloudTrail logs are encrypted with KMS',
     });
 
     // ═══════════════════════════════════════════════════════════

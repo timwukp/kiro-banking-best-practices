@@ -1,25 +1,29 @@
 # AWS Kiro Agentic Code in SDLC Best Practices for Banking Developers
-## Singapore MAS-Compliant Secure Development Framework
+## Singapore MAS-Aligned Secure Development Framework
 
-> **Audience:** security architects, banking developers, cloud ops · **Purpose:** Sections 1–4 — authentication, network isolation, and VDI for a MAS-compliant Kiro deployment · **Prerequisites:** AWS Organization + enterprise IdP · ↩ [README](README.md)
+> **Audience:** security architects, banking developers, cloud ops · **Purpose:** Sections 1–4 — authentication, network isolation, and VDI for a MAS-aligned Kiro deployment · **Prerequisites:** AWS Organization + enterprise IdP · ↩ [README](README.md)
 
 **Version:** 1.0  
 **Date:** February 2026  
 **Target Audience:** Banking Development Teams in Singapore  
-**Compliance Framework:** Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines
+**Regulatory Frameworks:**
+- Monetary Authority of Singapore (MAS) Technology Risk Management (TRM) Guidelines (18 January 2021), which apply to all MAS-regulated financial institutions
+- MAS Notice [FSM-N05](https://www.mas.gov.sg/regulation/notices/notice-fsm-n05) (Technology Risk Management) and Notice [FSM-N06](https://www.mas.gov.sg/regulation/notices/notice-fsm-n06) (Cyber Hygiene), binding for banks from 10 May 2024; other sectors have equivalent notices (see [README – Applicability](README.md#applicability-across-mas-regulated-financial-institutions))
+- MAS [Notice 658](https://www.mas.gov.sg/regulation/notices/notice-658) and [Guidelines on Outsourcing (Banks)](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-outsourcing-banks) for banks, and [Guidelines on Outsourcing (Financial Institutions other than Banks)](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-outsourcing-financial-institutions-other-than-banks) for other FIs, effective 11 December 2024 (the 2016/2018 Guidelines on Outsourcing are cancelled)
+- MAS [Guidelines on Artificial Intelligence Risk Management](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-artificial-intelligence-risk-management-for-financial-institutions), published 7 October 2026, effective 7 October 2027
 
 ---
 
 ## Executive Summary
 
-This document provides comprehensive best practices for Singapore banking developers using AWS Kiro in secure, MAS-compliant Software Development Life Cycle (SDLC) environments. It addresses end-to-end security from prototype to production, with emphasis on Enterprise Identity Provider (IdP) integration, VPC isolation, Virtual Desktop Infrastructure (VDI) controls, and Model Context Protocol (MCP) server governance.
+This document provides comprehensive best practices for Singapore banking developers using AWS Kiro in secure, MAS-aligned Software Development Life Cycle (SDLC) environments. It addresses end-to-end security from prototype to production, with emphasis on Enterprise Identity Provider (IdP) integration, VPC isolation, Virtual Desktop Infrastructure (VDI) controls, and Model Context Protocol (MCP) server governance.
 
 **Key Security Principles:**
 - **Zero Trust Architecture**: All access authenticated and authorized through Enterprise IdP
 - **Network Isolation**: End-to-end VPC connectivity with AWS PrivateLink
 - **Controlled Environment**: Amazon WorkSpaces VDI with DLP enforcement
 - **MCP Governance**: Centrally managed whitelist with developer restrictions
-- **MAS Compliance**: Alignment with Technology Risk Management Guidelines
+- **MAS Alignment**: Designed to support alignment with the MAS Technology Risk Management Guidelines and applicable MAS Notices; each institution remains responsible for its own compliance assessment
 
 ---
 
@@ -89,12 +93,12 @@ This document provides comprehensive best practices for Singapore banking develo
 
 | Layer | Component | MAS Alignment |
 |-------|-----------|---------------|
-| **Identity** | Enterprise IdP + IAM IDC | Access Control (Section 9) |
+| **Identity** | Enterprise IdP + IAM IDC | User and Privileged Access Management (Sections 9.1, 9.2) |
 | **Network** | VPC + PrivateLink | Network Security (Section 11.2) |
-| **Compute** | Amazon WorkSpaces VDI | Data Centre Resilience (Section 8.5) |
-| **Application** | Kiro with MCP Controls | Application Security (Annex A) |
-| **Data** | Encryption at Rest/Transit | Data Security (Section 11.1) |
-| **Monitoring** | CloudTrail + CloudWatch | Audit & Monitoring (Section 15) |
+| **Compute** | Amazon WorkSpaces VDI | Remote Access Management (Section 9.3); System and Virtualisation Security (Sections 11.3, 11.4) |
+| **Application** | Kiro with MCP Controls | Management of Third Party Services (Section 3.4); review and testing of third-party code, incl. MCP servers (Section 6.1.3); Network Security (Section 11.2) |
+| **Data** | Encryption at Rest/Transit | Data Security (Section 11.1); Cryptography (Sections 10.1, 10.2) |
+| **Monitoring** | CloudTrail + CloudWatch | Cyber Event Monitoring and Detection (Section 12.2); evidence for IT Audit (Section 15) |
 
 ---
 
@@ -161,7 +165,7 @@ aws sso-admin create-account-assignment \
 
 #### 2.1.3 Session Management
 
-**MAS Compliance Requirement:** Multi-factor authentication for privileged access
+**MAS alignment:** Multi-factor authentication for privileged access (TRM 9.2; for banks, Notice FSM-N06 para 4.6 requires MFA for all administrative accounts on critical systems)
 
 **Configuration:**
 - **Session Duration:** 90 days maximum (with hourly refresh)
@@ -235,7 +239,7 @@ deny tcp any any eq 443 host kiro-prod-us-east1.auth.us-east-1.amazoncognito.com
 
 ### 2.3 CloudTrail Logging for Audit
 
-**MAS Requirement:** Comprehensive audit trail for all access and actions
+**MAS alignment:** Comprehensive audit trail for all access and actions (TRM 12.2 Cyber Event Monitoring and Detection)
 
 **Enable CloudTrail for Kiro:**
 ```bash
