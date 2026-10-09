@@ -3,7 +3,7 @@ import * as kms from 'aws-cdk-lib/aws-kms';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { KiroBankingConfig } from '../../config/environments';
-import { NagSuppressions } from 'cdk-nag';
+import { auditTrailName } from '../naming';
 
 export interface EncryptionStackProps extends cdk.StackProps {
   readonly config: KiroBankingConfig;
@@ -15,7 +15,9 @@ export interface EncryptionStackProps extends cdk.StackProps {
  * MAS TRM Section 10 (Cryptography), 10.2 (Cryptographic Key Management):
  * - Customer-managed encryption keys for data at rest
  * - Key rotation enabled
- * - Strict key policies following least privilege
+ * - Strict key policies following least privilege: every service-principal
+ *   statement is scoped to this account (and, where the service supports it,
+ *   to the specific source resource) to prevent confused-deputy use
  */
 export class EncryptionStack extends cdk.Stack {
   public readonly auditKey: kms.Key;
@@ -27,7 +29,7 @@ export class EncryptionStack extends cdk.Stack {
 
     const { config } = props;
 
-    // --- KMS Key: Audit Logs (CloudTrail, S3 log bucket) ---
+    // --- KMS Key: Audit Logs (CloudTrail, S3 log bucket, CloudTrail log group, SNS alerts) ---
     this.auditKey = new kms.Key(this, 'AuditKey', {
       alias: `kiro-banking-audit-${config.environment}`,
       description: 'Encrypts CloudTrail logs and audit data (MAS TRM 10.2, 12.2)',
@@ -36,22 +38,52 @@ export class EncryptionStack extends cdk.Stack {
       pendingWindow: cdk.Duration.days(30),
     });
 
-    // Allow CloudTrail to use the key
+    // CloudTrail: key policy pattern from
+    // https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create-kms-key-policy-for-cloudtrail.html
+    // aws:SourceArn limits the key to this app's trail; the encryption context
+    // limits it to trails owned by this account (any region, because the trail
+    // is multi-region).
+    const trailArn = this.formatArn({
+      service: 'cloudtrail',
+      resource: 'trail',
+      resourceName: auditTrailName(config.environment),
+    });
+    const accountTrailsArn = this.formatArn({
+      service: 'cloudtrail',
+      region: '*',
+      resource: 'trail',
+      resourceName: '*',
+    });
+
     this.auditKey.addToResourcePolicy(
       new iam.PolicyStatement({
         sid: 'AllowCloudTrailEncrypt',
         principals: [new iam.ServicePrincipal('cloudtrail.amazonaws.com')],
-        actions: ['kms:GenerateDataKey*', 'kms:DescribeKey'],
+        actions: ['kms:GenerateDataKey*'],
         resources: ['*'],
         conditions: {
-          StringLike: {
-            'kms:EncryptionContext:aws:cloudtrail:arn': `arn:aws:cloudtrail:${config.region}:*:trail/*`,
-          },
+          StringEquals: { 'aws:SourceArn': trailArn },
+          StringLike: { 'kms:EncryptionContext:aws:cloudtrail:arn': accountTrailsArn },
         },
       }),
     );
 
-    // Allow CloudWatch Logs to use the key
+    // DescribeKey carries no encryption context, so it gets its own statement.
+    this.auditKey.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowCloudTrailDescribeKey',
+        principals: [new iam.ServicePrincipal('cloudtrail.amazonaws.com')],
+        actions: ['kms:DescribeKey'],
+        resources: ['*'],
+        conditions: {
+          StringEquals: { 'aws:SourceArn': trailArn },
+        },
+      }),
+    );
+
+    // CloudWatch Logs (the CloudTrail log group): key policy pattern from
+    // https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/encrypt-log-data-kms.html
+    // The encryption context limits the key to log groups in this account and region.
     this.auditKey.addToResourcePolicy(
       new iam.PolicyStatement({
         sid: 'AllowCloudWatchLogs',
@@ -64,6 +96,33 @@ export class EncryptionStack extends cdk.Stack {
           'kms:Describe*',
         ],
         resources: ['*'],
+        conditions: {
+          ArnLike: {
+            'kms:EncryptionContext:aws:logs:arn': this.formatArn({
+              service: 'logs',
+              resource: 'log-group',
+              resourceName: '*',
+              arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+            }),
+          },
+        },
+      }),
+    );
+
+    // CloudWatch alarms publish to the SNS security topic, which is encrypted
+    // with this key. Without this statement the alarm notifications fail.
+    // https://docs.aws.amazon.com/sns/latest/dg/sns-key-management.html
+    // (EventBridge, the other publisher, is granted by the SnsTopic target in
+    // MonitoringStack; SNS does not support source conditions for EventBridge.)
+    this.auditKey.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowCloudWatchAlarmsToEncryptedSns',
+        principals: [new iam.ServicePrincipal('cloudwatch.amazonaws.com')],
+        actions: ['kms:Decrypt', 'kms:GenerateDataKey*'],
+        resources: ['*'],
+        conditions: {
+          StringEquals: { 'aws:SourceAccount': this.account },
+        },
       }),
     );
 
@@ -85,7 +144,11 @@ export class EncryptionStack extends cdk.Stack {
       pendingWindow: cdk.Duration.days(30),
     });
 
-    // Allow WorkSpaces service to use the key
+    // WorkSpaces uses this key through grants that it creates on behalf of the
+    // WorkSpaces administrator (via the account statement above), see
+    // https://docs.aws.amazon.com/workspaces/latest/adminguide/encrypt-workspaces.html.
+    // The service-principal statement is limited to requests made on behalf of
+    // this account.
     this.workspacesKey.addToResourcePolicy(
       new iam.PolicyStatement({
         sid: 'AllowWorkSpacesEncrypt',
@@ -99,6 +162,9 @@ export class EncryptionStack extends cdk.Stack {
           'kms:DescribeKey',
         ],
         resources: ['*'],
+        conditions: {
+          StringEquals: { 'aws:SourceAccount': this.account },
+        },
       }),
     );
 
@@ -120,13 +186,5 @@ export class EncryptionStack extends cdk.Stack {
       description: 'KMS key ARN for WorkSpaces encryption',
       exportName: `KiroBanking-WorkspacesKeyArn-${config.environment}`,
     });
-
-    // CDK Nag suppressions with justification
-    NagSuppressions.addResourceSuppressions(this.auditKey, [
-      {
-        id: 'AwsSolutions-KMS5',
-        reason: 'Key rotation is enabled via enableKeyRotation: true',
-      },
-    ]);
   }
 }

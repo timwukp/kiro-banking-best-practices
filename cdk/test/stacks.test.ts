@@ -4,16 +4,26 @@ import { Aspects } from 'aws-cdk-lib';
 import { AwsSolutionsChecks } from 'cdk-nag';
 import { NetworkStack } from '../lib/stacks/network-stack';
 import { EncryptionStack } from '../lib/stacks/encryption-stack';
-import { MonitoringStack } from '../lib/stacks/monitoring-stack';
+import { MonitoringStack, transitionsBeforeExpiration } from '../lib/stacks/monitoring-stack';
 import { ComplianceStack } from '../lib/stacks/compliance-stack';
 import { BackupStack } from '../lib/stacks/backup-stack';
-import { devConfig, KiroBankingConfig } from '../config/environments';
+import { devConfig, prodConfig, KiroBankingConfig } from '../config/environments';
 import {
   KIRO_OPTIONAL_HOSTS,
   KIRO_SOCIAL_SIGNIN_HOSTS,
   kiroEgressDomains,
   kiroInterfaceEndpointServices,
 } from '../config/kiro-endpoints';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Use the feature flags from cdk.json so that the templates under test match `cdk synth`.
+const cdkJsonContext = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cdk.json'), 'utf8')).context;
+
+function newApp(): cdk.App {
+  return new cdk.App({ context: cdkJsonContext });
+}
 
 const account = '123456789012';
 const env = { region: 'ap-southeast-1', account };
@@ -22,6 +32,34 @@ const natConfig: KiroBankingConfig = {
   ...devConfig,
   egress: { mode: 'nat-dns-firewall', allowedDomains: ['updates.example.com'] },
 };
+
+/** An ARN as CDK renders it: arn:<AWS::Partition><rest>. */
+function partitionArn(rest: string): Record<string, unknown> {
+  return { 'Fn::Join': ['', ['arn:', { Ref: 'AWS::Partition' }, rest]] };
+}
+
+/** Logical ID of the only resource of `type` whose properties match `props`. */
+function logicalIdOf(template: Template, type: string, props: Record<string, unknown> = {}): string {
+  const ids = Object.keys(template.findResources(type, { Properties: props }));
+  expect(ids).toHaveLength(1);
+  return ids[0];
+}
+
+/** Key policy statements of the KMS key whose logical ID starts with `prefix`. */
+function keyPolicyStatements(template: Template, prefix: string): Record<string, unknown>[] {
+  const keys = Object.entries(template.findResources('AWS::KMS::Key')).filter(([id]) => id.startsWith(prefix));
+  expect(keys).toHaveLength(1);
+  return keys[0][1].Properties.KeyPolicy.Statement;
+}
+
+/** Fails if CDK Nag reported any AwsSolutions error or warning on these stacks. */
+function expectNoNagFindings(stacks: cdk.Stack[]): void {
+  for (const stack of stacks) {
+    const annotations = Annotations.fromStack(stack);
+    expect(annotations.findError('*', Match.stringLikeRegexp('AwsSolutions-.*'))).toHaveLength(0);
+    expect(annotations.findWarning('*', Match.stringLikeRegexp('AwsSolutions-.*'))).toHaveLength(0);
+  }
+}
 
 /** Service names of all VPC endpoints in a template. */
 function endpointServiceNames(template: Template): string[] {
@@ -39,7 +77,7 @@ function domainListDomains(template: Template, name: string): string[] {
 }
 
 describe('EncryptionStack', () => {
-  const app = new cdk.App();
+  const app = newApp();
   const stack = new EncryptionStack(app, 'TestEncryption', { env, config: devConfig });
   const template = Template.fromStack(stack);
 
@@ -59,10 +97,81 @@ describe('EncryptionStack', () => {
       UpdateReplacePolicy: 'Retain',
     });
   });
+
+  test('AuditKey lets CloudWatch alarms use the encrypted SNS topic, only for this account', () => {
+    expect(keyPolicyStatements(template, 'AuditKey')).toContainEqual({
+      Sid: 'AllowCloudWatchAlarmsToEncryptedSns',
+      Effect: 'Allow',
+      Principal: { Service: 'cloudwatch.amazonaws.com' },
+      Action: ['kms:Decrypt', 'kms:GenerateDataKey*'],
+      Resource: '*',
+      Condition: { StringEquals: { 'aws:SourceAccount': account } },
+    });
+  });
+
+  test('AuditKey CloudTrail statements are scoped to this trail and to trails of this account', () => {
+    const trailArn = partitionArn(`:cloudtrail:ap-southeast-1:${account}:trail/kiro-banking-audit-dev`);
+    const statements = keyPolicyStatements(template, 'AuditKey');
+    expect(statements).toContainEqual({
+      Sid: 'AllowCloudTrailEncrypt',
+      Effect: 'Allow',
+      Principal: { Service: 'cloudtrail.amazonaws.com' },
+      Action: 'kms:GenerateDataKey*',
+      Resource: '*',
+      Condition: {
+        StringEquals: { 'aws:SourceArn': trailArn },
+        StringLike: { 'kms:EncryptionContext:aws:cloudtrail:arn': partitionArn(`:cloudtrail:*:${account}:trail/*`) },
+      },
+    });
+    expect(statements).toContainEqual({
+      Sid: 'AllowCloudTrailDescribeKey',
+      Effect: 'Allow',
+      Principal: { Service: 'cloudtrail.amazonaws.com' },
+      Action: 'kms:DescribeKey',
+      Resource: '*',
+      Condition: { StringEquals: { 'aws:SourceArn': trailArn } },
+    });
+    // The old region-wide wildcard (any account's trails) is gone.
+    expect(JSON.stringify(statements)).not.toContain('arn:aws:cloudtrail:ap-southeast-1:*');
+  });
+
+  test('AuditKey CloudWatch Logs statement is limited to log groups of this account and region', () => {
+    expect(keyPolicyStatements(template, 'AuditKey')).toContainEqual({
+      Sid: 'AllowCloudWatchLogs',
+      Effect: 'Allow',
+      Principal: { Service: 'logs.ap-southeast-1.amazonaws.com' },
+      Action: ['kms:Decrypt*', 'kms:Describe*', 'kms:Encrypt*', 'kms:GenerateDataKey*', 'kms:ReEncrypt*'],
+      Resource: '*',
+      Condition: {
+        ArnLike: { 'kms:EncryptionContext:aws:logs:arn': partitionArn(`:logs:ap-southeast-1:${account}:log-group:*`) },
+      },
+    });
+  });
+
+  test('WorkspacesKey service statement is limited to this account', () => {
+    expect(keyPolicyStatements(template, 'WorkspacesKey')).toContainEqual({
+      Sid: 'AllowWorkSpacesEncrypt',
+      Effect: 'Allow',
+      Principal: { Service: 'workspaces.amazonaws.com' },
+      Action: ['kms:CreateGrant', 'kms:Decrypt', 'kms:DescribeKey', 'kms:Encrypt', 'kms:GenerateDataKey*', 'kms:ReEncrypt*'],
+      Resource: '*',
+      Condition: { StringEquals: { 'aws:SourceAccount': account } },
+    });
+  });
+
+  test('every service-principal statement has a condition', () => {
+    for (const prefix of ['AuditKey', 'DataKey', 'WorkspacesKey']) {
+      for (const statement of keyPolicyStatements(template, prefix)) {
+        if ((statement.Principal as Record<string, unknown>).Service !== undefined) {
+          expect(statement.Condition).toBeDefined();
+        }
+      }
+    }
+  });
 });
 
 describe('NetworkStack', () => {
-  const app = new cdk.App();
+  const app = newApp();
   const stack = new NetworkStack(app, 'TestNetwork', { env, config: devConfig });
   const template = Template.fromStack(stack);
 
@@ -104,16 +213,99 @@ describe('NetworkStack', () => {
     template.resourceCountIs('AWS::EC2::SecurityGroup', 2);
   });
 
-  // Template-level check only: see the NOTE on WorkspacesSG in network-stack.ts
-  // about EC2's default egress rule.
   test('declares no 0.0.0.0/0 security group egress rules', () => {
     for (const type of ['AWS::EC2::SecurityGroup', 'AWS::EC2::SecurityGroupEgress']) {
       expect(JSON.stringify(template.findResources(type))).not.toContain('0.0.0.0/0');
     }
   });
 
+  test('WorkSpaces security group removes EC2 default allow-all egress: inline no-traffic rule plus HTTPS to endpoints', () => {
+    // An inline egress rule makes EC2 drop its default allow-all rule; this one matches no traffic.
+    template.hasResourceProperties('AWS::EC2::SecurityGroup', {
+      GroupName: 'kiro-workspaces-sg-dev',
+      GroupDescription: 'Security group for WorkSpaces - outbound to VPC endpoints only',
+      SecurityGroupEgress: [
+        { CidrIp: '255.255.255.255/32', Description: 'Disallow all traffic', IpProtocol: 'icmp', FromPort: 252, ToPort: 86 },
+      ],
+    });
+    const workspacesSg = logicalIdOf(template, 'AWS::EC2::SecurityGroup', { GroupName: 'kiro-workspaces-sg-dev' });
+    const endpointSg = logicalIdOf(template, 'AWS::EC2::SecurityGroup', { GroupName: 'kiro-vpc-endpoint-sg-dev' });
+    template.resourceCountIs('AWS::EC2::SecurityGroupEgress', 1);
+    template.hasResourceProperties('AWS::EC2::SecurityGroupEgress', {
+      GroupId: { 'Fn::GetAtt': [workspacesSg, 'GroupId'] },
+      DestinationSecurityGroupId: { 'Fn::GetAtt': [endpointSg, 'GroupId'] },
+      IpProtocol: 'tcp',
+      FromPort: 443,
+      ToPort: 443,
+    });
+  });
+
+  test('Endpoints NACL is associated with both Endpoints subnets (and no others)', () => {
+    const nacl = logicalIdOf(template, 'AWS::EC2::NetworkAcl');
+    const subnetCidrs = Object.fromEntries(Object.entries(template.findResources('AWS::EC2::Subnet'))
+      .map(([id, r]) => [id, r.Properties.CidrBlock as string]));
+    const associations = Object.values(template.findResources('AWS::EC2::SubnetNetworkAclAssociation'));
+    expect(associations).toHaveLength(2);
+    for (const association of associations) {
+      expect(association.Properties.NetworkAclId).toEqual({ Ref: nacl });
+    }
+    const associatedCidrs = associations.map((a) => subnetCidrs[a.Properties.SubnetId.Ref]).sort();
+    expect(associatedCidrs).toEqual(['10.0.2.0/24', '10.0.3.0/24']);
+  });
+
+  test('Endpoints NACL allows only HTTPS and ephemeral return traffic within the VPC CIDR', () => {
+    const nacl = logicalIdOf(template, 'AWS::EC2::NetworkAcl');
+    template.resourceCountIs('AWS::EC2::NetworkAclEntry', 4);
+    for (const egress of [false, true]) {
+      for (const [ruleNumber, from, to] of [[100, 443, 443], [110, 1024, 65535]]) {
+        template.hasResourceProperties('AWS::EC2::NetworkAclEntry', {
+          NetworkAclId: { Ref: nacl },
+          CidrBlock: devConfig.vpcCidr,
+          Egress: egress,
+          Protocol: 6,
+          PortRange: { From: from, To: to },
+          RuleAction: 'allow',
+          RuleNumber: ruleNumber,
+        });
+      }
+    }
+  });
+
   test('creates VPC flow logs', () => {
     template.resourceCountIs('AWS::EC2::FlowLog', 1);
+  });
+
+  test('flow-log group is encrypted with a dedicated rotating KMS key and keeps its retention and generated name', () => {
+    const flowLogKey = logicalIdOf(template, 'AWS::KMS::Key');
+    expect(flowLogKey).toMatch(/^FlowLogKey/);
+    template.hasResource('AWS::KMS::Key', {
+      Properties: { EnableKeyRotation: true, PendingWindowInDays: 30 },
+      DeletionPolicy: 'Retain',
+      UpdateReplacePolicy: 'Retain',
+    });
+    template.hasResourceProperties('AWS::KMS::Alias', { AliasName: 'alias/kiro-banking-flow-logs-dev' });
+
+    const logGroups = template.findResources('AWS::Logs::LogGroup');
+    expect(Object.keys(logGroups)).toHaveLength(1);
+    const [logGroupId, logGroup] = Object.entries(logGroups)[0];
+    expect(logGroupId).toMatch(/^KiroVpcVpcFlowLogsLogGroup/);
+    expect(logGroup.Properties.KmsKeyId).toEqual({ 'Fn::GetAtt': [flowLogKey, 'Arn'] });
+    expect(logGroup.Properties.RetentionInDays).toBe(731);
+    expect(logGroup.Properties.LogGroupName).toBeUndefined();
+
+    // CloudFormation names the group <stack name>-<logical ID>-<suffix>; only that group may use the key.
+    expect(keyPolicyStatements(template, 'FlowLogKey')).toContainEqual({
+      Sid: 'AllowCloudWatchLogsFlowLogGroup',
+      Effect: 'Allow',
+      Principal: { Service: 'logs.ap-southeast-1.amazonaws.com' },
+      Action: ['kms:Decrypt*', 'kms:Describe*', 'kms:Encrypt*', 'kms:GenerateDataKey*', 'kms:ReEncrypt*'],
+      Resource: '*',
+      Condition: {
+        ArnLike: {
+          'kms:EncryptionContext:aws:logs:arn': partitionArn(`:logs:ap-southeast-1:${account}:log-group:TestNetwork-${logGroupId}-*`),
+        },
+      },
+    });
   });
 
   test('no NAT gateways (zero trust)', () => {
@@ -138,7 +330,7 @@ describe('NetworkStack', () => {
 
 describe('NetworkStack in a Kiro profile region', () => {
   test('us-east-1 creates the .q and .codewhisperer Kiro endpoints', () => {
-    const app = new cdk.App();
+    const app = newApp();
     const stack = new NetworkStack(app, 'TestNetworkUse1', {
       env: { account, region: 'us-east-1' },
       config: { ...devConfig, region: 'us-east-1', kiroProfileRegion: 'us-east-1' },
@@ -155,7 +347,7 @@ describe('NetworkStack in a Kiro profile region', () => {
   });
 
   test('eu-central-1 creates only the .q Kiro endpoint', () => {
-    const app = new cdk.App();
+    const app = newApp();
     const stack = new NetworkStack(app, 'TestNetworkEuc1', {
       env: { account, region: 'eu-central-1' },
       config: { ...devConfig, region: 'eu-central-1', kiroProfileRegion: 'eu-central-1' },
@@ -169,7 +361,7 @@ describe('NetworkStack in a Kiro profile region', () => {
   });
 
   test('no Kiro endpoints when the workload region differs from kiroProfileRegion', () => {
-    const app = new cdk.App();
+    const app = newApp();
     const stack = new NetworkStack(app, 'TestNetworkMismatch', {
       env: { account, region: 'us-east-1' },
       config: { ...devConfig, region: 'us-east-1', kiroProfileRegion: 'eu-central-1' },
@@ -178,7 +370,7 @@ describe('NetworkStack in a Kiro profile region', () => {
   });
 
   test('kiroEndpoints can select a subset of the Kiro endpoints', () => {
-    const app = new cdk.App();
+    const app = newApp();
     const stack = new NetworkStack(app, 'TestNetworkSubset', {
       env: { account, region: 'us-east-1' },
       config: { ...devConfig, region: 'us-east-1', kiroEndpoints: ['com.amazonaws.us-east-1.q'] },
@@ -189,7 +381,7 @@ describe('NetworkStack in a Kiro profile region', () => {
   });
 
   test('rejects Kiro endpoint names that do not exist in the workload region', () => {
-    const app = new cdk.App();
+    const app = newApp();
     expect(() => new NetworkStack(app, 'TestNetworkBadEndpoints', {
       env,
       config: { ...devConfig, kiroEndpoints: ['com.amazonaws.ap-southeast-1.q'] },
@@ -198,7 +390,7 @@ describe('NetworkStack in a Kiro profile region', () => {
 });
 
 describe('NetworkStack egress mode nat-dns-firewall', () => {
-  const app = new cdk.App();
+  const app = newApp();
   const stack = new NetworkStack(app, 'TestNetworkNat', { env, config: natConfig });
   const template = Template.fromStack(stack);
 
@@ -270,7 +462,7 @@ describe('NetworkStack egress mode nat-dns-firewall', () => {
 
   test('rejects an invalid or allow-all extra domain', () => {
     for (const bad of ['*', 'https://example.com/path']) {
-      const badApp = new cdk.App();
+      const badApp = newApp();
       expect(() => new NetworkStack(badApp, 'TestNetworkBadDomain', {
         env,
         config: { ...natConfig, egress: { mode: 'nat-dns-firewall', allowedDomains: [bad] } },
@@ -326,7 +518,7 @@ describe('Kiro endpoint and allowlist helpers', () => {
 });
 
 describe('MonitoringStack', () => {
-  const app = new cdk.App();
+  const app = newApp();
   const encStack = new EncryptionStack(app, 'TestEnc2', { env, config: devConfig });
   const stack = new MonitoringStack(app, 'TestMonitoring', {
     env,
@@ -362,7 +554,8 @@ describe('MonitoringStack', () => {
   });
 
   test('creates CloudWatch alarms', () => {
-    template.resourceCountIs('AWS::CloudWatch::Alarm', 4);
+    template.resourceCountIs('AWS::CloudWatch::Alarm', 7);
+    template.resourceCountIs('AWS::Logs::MetricFilter', 7);
   });
 
   test('creates SNS topic for alerts', () => {
@@ -370,8 +563,130 @@ describe('MonitoringStack', () => {
   });
 
   test('CloudWatch alarms have alarm actions', () => {
+    const topic = logicalIdOf(template, 'AWS::SNS::Topic');
+    template.allResourcesProperties('AWS::CloudWatch::Alarm', {
+      AlarmActions: [{ Ref: topic }],
+    });
+  });
+
+  test('SNS topic policy lets CloudWatch alarms of this account and region publish', () => {
+    const topic = logicalIdOf(template, 'AWS::SNS::Topic');
+    template.resourceCountIs('AWS::SNS::TopicPolicy', 1);
+    template.hasResourceProperties('AWS::SNS::TopicPolicy', {
+      Topics: [{ Ref: topic }],
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          // GuardDuty findings via EventBridge (SNS does not support source conditions for EventBridge)
+          Match.objectLike({
+            Effect: 'Allow',
+            Principal: { Service: 'events.amazonaws.com' },
+            Action: 'sns:Publish',
+            Resource: { Ref: topic },
+          }),
+          {
+            Sid: 'AllowCloudWatchAlarmsPublish',
+            Effect: 'Allow',
+            Principal: { Service: 'cloudwatch.amazonaws.com' },
+            Action: 'sns:Publish',
+            Resource: { Ref: topic },
+            Condition: {
+              StringEquals: { 'aws:SourceAccount': account },
+              ArnLike: { 'aws:SourceArn': partitionArn(`:cloudwatch:ap-southeast-1:${account}:alarm:*`) },
+            },
+          },
+        ]),
+      },
+    });
+  });
+
+  test('no-MFA sign-in filter only counts successful IAM user console sign-ins without MFA', () => {
+    template.hasResourceProperties('AWS::Logs::MetricFilter', {
+      MetricTransformations: [Match.objectLike({ MetricName: 'ConsoleSignInWithoutMfa', MetricNamespace: 'KiroBanking/Security' })],
+      FilterPattern:
+        '{ ($.eventName = "ConsoleLogin") && ($.additionalEventData.MFAUsed != "Yes") && ' +
+        '($.userIdentity.type = "IAMUser") && ($.responseElements.ConsoleLogin = "Success") }',
+    });
+  });
+
+  test('IAM policy change filter covers the CIS AWS Foundations 4.4 events for IAM only', () => {
+    const filters = Object.values(template.findResources('AWS::Logs::MetricFilter', {
+      Properties: { MetricTransformations: [Match.objectLike({ MetricName: 'IamPolicyChanges' })] },
+    }));
+    expect(filters).toHaveLength(1);
+    const pattern = filters[0].Properties.FilterPattern as string;
+    expect(pattern.startsWith('{ ($.eventSource = "iam.amazonaws.com") && (')).toBe(true);
+    const events = [...pattern.matchAll(/\$\.eventName = (\w+)/g)].map((m) => m[1]).sort();
+    expect(events).toEqual([
+      'AttachGroupPolicy', 'AttachRolePolicy', 'AttachUserPolicy',
+      'CreatePolicy', 'CreatePolicyVersion',
+      'DeleteGroupPolicy', 'DeletePolicy', 'DeletePolicyVersion', 'DeleteRolePolicy', 'DeleteUserPolicy',
+      'DetachGroupPolicy', 'DetachRolePolicy', 'DetachUserPolicy',
+      'PutGroupPolicy', 'PutRolePolicy', 'PutUserPolicy',
+      'SetDefaultPolicyVersion',
+    ]);
+  });
+
+  test.each([
+    ['root-account-usage', 'RootAccountUsage',
+      '{ ($.userIdentity.type = "Root") && ($.userIdentity.invokedBy NOT EXISTS) && ($.eventType != "AwsServiceEvent") }'],
+    ['cloudtrail-change', 'CloudTrailConfigChanges',
+      '{ ($.eventName = CreateTrail) || ($.eventName = UpdateTrail) || ($.eventName = DeleteTrail) || ' +
+      '($.eventName = StartLogging) || ($.eventName = StopLogging) }'],
+    ['kms-key-disable-or-deletion', 'KmsKeyDisableOrScheduledDeletion',
+      '{ ($.eventSource = "kms.amazonaws.com") && (($.eventName = DisableKey) || ($.eventName = ScheduleKeyDeletion)) }'],
+  ])('CIS alarm %s notifies the security topic on the first event', (alarmName, metricName, filterPattern) => {
+    const topic = logicalIdOf(template, 'AWS::SNS::Topic');
+    const trailLogGroup = logicalIdOf(template, 'AWS::Logs::LogGroup');
+    template.hasResourceProperties('AWS::Logs::MetricFilter', {
+      LogGroupName: { Ref: trailLogGroup },
+      FilterPattern: filterPattern,
+      MetricTransformations: [{ MetricName: metricName, MetricNamespace: 'KiroBanking/Security', MetricValue: '1' }],
+    });
     template.hasResourceProperties('AWS::CloudWatch::Alarm', {
-      AlarmActions: Match.anyValue(),
+      AlarmName: `kiro-banking-${alarmName}-dev`,
+      MetricName: metricName,
+      Namespace: 'KiroBanking/Security',
+      Statistic: 'Sum',
+      Period: 300,
+      Threshold: 1,
+      EvaluationPeriods: 1,
+      ComparisonOperator: 'GreaterThanOrEqualToThreshold',
+      TreatMissingData: 'notBreaching',
+      AlarmActions: [{ Ref: topic }],
+    });
+  });
+
+  test('audit-log bucket has Object Lock with a GOVERNANCE default retention', () => {
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      ObjectLockEnabled: true,
+      ObjectLockConfiguration: {
+        ObjectLockEnabled: 'Enabled',
+        Rule: { DefaultRetention: { Mode: 'GOVERNANCE', Days: 30 } },
+      },
+      VersioningConfiguration: { Status: 'Enabled' },
+    });
+  });
+
+  test('dev audit-log lifecycle: transitions strictly before the 90-day expiration, noncurrent versions expire', () => {
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      ObjectLockEnabled: true,
+      LifecycleConfiguration: {
+        Rules: [{
+          Status: 'Enabled',
+          ExpirationInDays: 90,
+          NoncurrentVersionExpiration: { NoncurrentDays: 90 },
+          Transitions: [{ StorageClass: 'STANDARD_IA', TransitionInDays: 30 }],
+        }],
+      },
+    });
+  });
+
+  test('access-log bucket expires after 365 days with a Glacier transition before that', () => {
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      BucketEncryption: { ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: 'AES256' } }] },
+      LifecycleConfiguration: {
+        Rules: [{ Status: 'Enabled', ExpirationInDays: 365, Transitions: [{ StorageClass: 'GLACIER', TransitionInDays: 90 }] }],
+      },
     });
   });
 
@@ -396,8 +711,87 @@ describe('MonitoringStack', () => {
   });
 });
 
+describe('MonitoringStack options', () => {
+  function monitoringTemplate(config: KiroBankingConfig, id: string): Template {
+    const app = newApp();
+    const enc = new EncryptionStack(app, `${id}Enc`, { env, config });
+    return Template.fromStack(new MonitoringStack(app, id, { env, config, kmsKey: enc.auditKey }));
+  }
+
+  test('prod audit-log bucket: IA at 30 and Glacier at 90 days, 2555-day expiration, 365-day Object Lock', () => {
+    const template = monitoringTemplate(prodConfig, 'TestMonitoringProd');
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      ObjectLockConfiguration: {
+        ObjectLockEnabled: 'Enabled',
+        Rule: { DefaultRetention: { Mode: 'GOVERNANCE', Days: 365 } },
+      },
+      LifecycleConfiguration: {
+        Rules: [{
+          Status: 'Enabled',
+          ExpirationInDays: 2555,
+          NoncurrentVersionExpiration: { NoncurrentDays: 90 },
+          Transitions: [
+            { StorageClass: 'STANDARD_IA', TransitionInDays: 30 },
+            { StorageClass: 'GLACIER', TransitionInDays: 90 },
+          ],
+        }],
+      },
+    });
+  });
+
+  test('a 30-day retention drops all transitions instead of producing an invalid lifecycle rule', () => {
+    const template = monitoringTemplate(
+      { ...devConfig, cloudTrailRetentionDays: 30, auditLogObjectLockDays: 7, accessLogRetentionDays: 60 },
+      'TestMonitoringShort',
+    );
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      ObjectLockEnabled: true,
+      LifecycleConfiguration: {
+        Rules: [{
+          Status: 'Enabled',
+          ExpirationInDays: 30,
+          NoncurrentVersionExpiration: { NoncurrentDays: 90 },
+          Transitions: Match.absent(),
+        }],
+      },
+    });
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      BucketEncryption: { ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: 'AES256' } }] },
+      LifecycleConfiguration: { Rules: [{ Status: 'Enabled', ExpirationInDays: 60, Transitions: Match.absent() }] },
+    });
+  });
+
+  test('transitionsBeforeExpiration keeps only transitions earlier than the expiration', () => {
+    const transitions = [
+      { storageClass: s3.StorageClass.INFREQUENT_ACCESS, days: 30 },
+      { storageClass: s3.StorageClass.GLACIER, days: 90 },
+    ];
+    expect(transitionsBeforeExpiration(91, transitions)?.map((t) => t.transitionAfter?.toDays())).toEqual([30, 90]);
+    expect(transitionsBeforeExpiration(90, transitions)?.map((t) => t.storageClass)).toEqual([s3.StorageClass.INFREQUENT_ACCESS]);
+    expect(transitionsBeforeExpiration(30, transitions)).toBeUndefined();
+  });
+
+  test('rejects an Object Lock retention longer than the log retention, and non-integer days', () => {
+    expect(() => monitoringTemplate({ ...devConfig, auditLogObjectLockDays: 91 }, 'TestMonitoringBadLock'))
+      .toThrow(/auditLogObjectLockDays \(91\) must not exceed cloudTrailRetentionDays \(90\)/);
+    expect(() => monitoringTemplate({ ...devConfig, accessLogRetentionDays: 1.5 }, 'TestMonitoringBadDays'))
+      .toThrow(/accessLogRetentionDays must be a positive whole number/);
+  });
+
+  test('enableGuardDuty: false skips the detector but still routes findings to the security topic', () => {
+    const template = monitoringTemplate({ ...devConfig, enableGuardDuty: false }, 'TestMonitoringNoGd');
+    template.resourceCountIs('AWS::GuardDuty::Detector', 0);
+    const topic = logicalIdOf(template, 'AWS::SNS::Topic');
+    template.hasResourceProperties('AWS::Events::Rule', {
+      Name: 'kiro-banking-guardduty-findings-dev',
+      EventPattern: { source: ['aws.guardduty'], 'detail-type': ['GuardDuty Finding'] },
+      Targets: [Match.objectLike({ Arn: { Ref: topic } })],
+    });
+  });
+});
+
 describe('ComplianceStack', () => {
-  const app = new cdk.App();
+  const app = newApp();
   const stack = new ComplianceStack(app, 'TestCompliance', { env, config: devConfig });
   const template = Template.fromStack(stack);
 
@@ -414,10 +808,165 @@ describe('ComplianceStack', () => {
   test('enables SecurityHub', () => {
     template.resourceCountIs('AWS::SecurityHub::Hub', 1);
   });
+
+  test('ComplianceRuleCount output equals the number of Config rules', () => {
+    template.hasOutput('ComplianceRuleCount', { Value: '19' });
+  });
+
+  test('createConfigRecorder defaults to false: no recorder, no delivery channel, rules have no recorder dependency', () => {
+    template.resourceCountIs('AWS::Config::ConfigurationRecorder', 0);
+    template.resourceCountIs('AWS::Config::DeliveryChannel', 0);
+    template.resourceCountIs('AWS::S3::Bucket', 0);
+    for (const rule of Object.values(template.findResources('AWS::Config::ConfigRule'))) {
+      expect(rule.DependsOn).toBeUndefined();
+    }
+  });
+});
+
+describe('ComplianceStack with createConfigRecorder: true', () => {
+  const app = newApp();
+  const stack = new ComplianceStack(app, 'TestComplianceRecorder', {
+    env,
+    config: { ...devConfig, createConfigRecorder: true },
+  });
+  const template = Template.fromStack(stack);
+
+  test('creates one recorder for all supported resource types, including global IAM types', () => {
+    template.resourceCountIs('AWS::Config::ConfigurationRecorder', 1);
+    const role = logicalIdOf(template, 'AWS::IAM::Role');
+    template.hasResourceProperties('AWS::Config::ConfigurationRecorder', {
+      Name: 'kiro-banking-config-recorder-dev',
+      RoleARN: { 'Fn::GetAtt': [role, 'Arn'] },
+      RecordingGroup: { AllSupported: true, IncludeGlobalResourceTypes: true },
+    });
+  });
+
+  test('creates one delivery channel to the dedicated KMS-encrypted bucket, after the recorder', () => {
+    template.resourceCountIs('AWS::Config::DeliveryChannel', 1);
+    const bucket = logicalIdOf(template, 'AWS::S3::Bucket', { VersioningConfiguration: { Status: 'Enabled' } });
+    const key = logicalIdOf(template, 'AWS::KMS::Key');
+    template.hasResource('AWS::Config::DeliveryChannel', {
+      Properties: {
+        Name: 'kiro-banking-config-delivery-dev',
+        S3BucketName: { Ref: bucket },
+        S3KmsKeyArn: { 'Fn::GetAtt': [key, 'Arn'] },
+        ConfigSnapshotDeliveryProperties: { DeliveryFrequency: 'TwentyFour_Hours' },
+      },
+      DependsOn: Match.arrayWith(['ConfigRecorder']),
+    });
+  });
+
+  test('keeps 19 rules, each depending on the recorder and the delivery channel', () => {
+    const rules = Object.values(template.findResources('AWS::Config::ConfigRule'));
+    expect(rules).toHaveLength(19);
+    for (const rule of rules) {
+      expect(rule.DependsOn).toEqual(expect.arrayContaining(['ConfigRecorder', 'ConfigDeliveryChannel']));
+    }
+    template.hasOutput('ComplianceRuleCount', { Value: '19' });
+  });
+
+  test('Config bucket is KMS-encrypted, versioned, SSL-only, private, access-logged and without Object Lock', () => {
+    const key = logicalIdOf(template, 'AWS::KMS::Key');
+    const accessLogBucket = logicalIdOf(template, 'AWS::S3::Bucket', { LoggingConfiguration: Match.absent() });
+    const bucket = logicalIdOf(template, 'AWS::S3::Bucket', {
+      BucketEncryption: {
+        ServerSideEncryptionConfiguration: [{
+          BucketKeyEnabled: true,
+          ServerSideEncryptionByDefault: { SSEAlgorithm: 'aws:kms', KMSMasterKeyID: { 'Fn::GetAtt': [key, 'Arn'] } },
+        }],
+      },
+      VersioningConfiguration: { Status: 'Enabled' },
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true,
+      },
+      LoggingConfiguration: { DestinationBucketName: { Ref: accessLogBucket }, LogFilePrefix: 'config-bucket-access/' },
+      ObjectLockEnabled: Match.absent(),
+    });
+    template.hasResourceProperties('AWS::S3::BucketPolicy', {
+      Bucket: { Ref: bucket },
+      PolicyDocument: {
+        Statement: Match.arrayWith([Match.objectLike({
+          Effect: 'Deny',
+          Action: 's3:*',
+          Condition: { Bool: { 'aws:SecureTransport': 'false' } },
+        })]),
+      },
+    });
+    template.hasResource('AWS::KMS::Key', {
+      Properties: { EnableKeyRotation: true },
+      DeletionPolicy: 'Retain',
+    });
+  });
+
+  test('recorder role trusts AWS Config for this account only and uses AWS_ConfigRole plus scoped delivery permissions', () => {
+    template.hasResourceProperties('AWS::IAM::Role', {
+      AssumeRolePolicyDocument: {
+        Statement: [{
+          Effect: 'Allow',
+          Action: 'sts:AssumeRole',
+          Principal: { Service: 'config.amazonaws.com' },
+          Condition: {
+            StringEquals: { 'aws:SourceAccount': account },
+            ArnLike: { 'aws:SourceArn': partitionArn(`:config:ap-southeast-1:${account}:*`) },
+          },
+        }],
+      },
+      ManagedPolicyArns: [partitionArn(':iam::aws:policy/service-role/AWS_ConfigRole')],
+    });
+    const bucket = logicalIdOf(template, 'AWS::S3::Bucket', { VersioningConfiguration: { Status: 'Enabled' } });
+    const key = logicalIdOf(template, 'AWS::KMS::Key');
+    template.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: {
+        Statement: [
+          {
+            Sid: 'ConfigBucketDelivery',
+            Effect: 'Allow',
+            Action: ['s3:PutObject', 's3:PutObjectAcl'],
+            Resource: { 'Fn::Join': ['', [{ 'Fn::GetAtt': [bucket, 'Arn'] }, `/AWSLogs/${account}/*`]] },
+            Condition: { StringLike: { 's3:x-amz-acl': 'bucket-owner-full-control' } },
+          },
+          { Sid: 'ConfigBucketAcl', Effect: 'Allow', Action: 's3:GetBucketAcl', Resource: { 'Fn::GetAtt': [bucket, 'Arn'] } },
+          { Sid: 'ConfigBucketKey', Effect: 'Allow', Action: ['kms:Decrypt', 'kms:GenerateDataKey'], Resource: { 'Fn::GetAtt': [key, 'Arn'] } },
+        ],
+      },
+    });
+  });
+
+  test('configRecorderGlobalResources: false records regional resource types only', () => {
+    const otherApp = newApp();
+    const regional = new ComplianceStack(otherApp, 'TestComplianceRegional', {
+      env,
+      config: { ...devConfig, createConfigRecorder: true, configRecorderGlobalResources: false },
+    });
+    Template.fromStack(regional).hasResourceProperties('AWS::Config::ConfigurationRecorder', {
+      RecordingGroup: { AllSupported: true, IncludeGlobalResourceTypes: false },
+    });
+  });
+});
+
+describe('ComplianceStack account-level singletons', () => {
+  test('enableSecurityHub: false and enableAccessAnalyzer: false skip the hub and the analyzer only', () => {
+    const app = newApp();
+    const stack = new ComplianceStack(app, 'TestComplianceNoSingletons', {
+      env,
+      config: { ...devConfig, enableSecurityHub: false, enableAccessAnalyzer: false },
+    });
+    const template = Template.fromStack(stack);
+    template.resourceCountIs('AWS::SecurityHub::Hub', 0);
+    template.resourceCountIs('AWS::AccessAnalyzer::Analyzer', 0);
+    template.resourceCountIs('AWS::Config::ConfigRule', 19);
+  });
+
+  test('defaults keep the analyzer name and the hub', () => {
+    const app = newApp();
+    const template = Template.fromStack(new ComplianceStack(app, 'TestComplianceDefaults', { env, config: devConfig }));
+    template.hasResourceProperties('AWS::AccessAnalyzer::Analyzer', { AnalyzerName: 'kiro-banking-analyzer-dev', Type: 'ACCOUNT' });
+    template.resourceCountIs('AWS::SecurityHub::Hub', 1);
+  });
 });
 
 describe('BackupStack', () => {
-  const app = new cdk.App();
+  const app = newApp();
   const stack = new BackupStack(app, 'TestBackup', { env, config: devConfig });
   const template = Template.fromStack(stack);
 
@@ -444,15 +993,41 @@ describe('BackupStack', () => {
   });
 
   test('backup vault is KMS encrypted', () => {
+    const key = logicalIdOf(template, 'AWS::KMS::Key');
     template.hasResourceProperties('AWS::Backup::BackupVault', {
-      EncryptionKeyArn: Match.anyValue(),
+      EncryptionKeyArn: { 'Fn::GetAtt': [key, 'Arn'] },
     });
+  });
+
+  test('backup schedule defaults to 18:00 UTC (02:00 Singapore time)', () => {
+    template.hasResourceProperties('AWS::Backup::BackupPlan', {
+      BackupPlan: {
+        BackupPlanName: 'kiro-banking-daily-dev',
+        BackupPlanRule: [Match.objectLike({ RuleName: 'DailyBackup', ScheduleExpression: 'cron(0 18 * * ? *)' })],
+      },
+    });
+  });
+
+  test('backupScheduleCron overrides the schedule and must be an AWS cron expression', () => {
+    const customApp = newApp();
+    const custom = new BackupStack(customApp, 'TestBackupCustom', {
+      env,
+      config: { ...devConfig, backupScheduleCron: 'cron(30 16 ? * SUN *)' },
+    });
+    Template.fromStack(custom).hasResourceProperties('AWS::Backup::BackupPlan', {
+      BackupPlan: { BackupPlanRule: [Match.objectLike({ ScheduleExpression: 'cron(30 16 ? * SUN *)' })] },
+    });
+    for (const bad of ['0 18 * * ? *', 'rate(1 day)', 'cron(0 18 * *)']) {
+      const badApp = newApp();
+      expect(() => new BackupStack(badApp, 'TestBackupBad', { env, config: { ...devConfig, backupScheduleCron: bad } }))
+        .toThrow(/backupScheduleCron/);
+    }
   });
 });
 
 describe('CDK Nag Compliance', () => {
   test('all stacks pass CDK Nag AwsSolutionsChecks', () => {
-    const app = new cdk.App();
+    const app = newApp();
     const enc = new EncryptionStack(app, 'NagEnc', { env, config: devConfig });
     const mon = new MonitoringStack(app, 'NagMon', { env, config: devConfig, kmsKey: enc.auditKey });
     const comp = new ComplianceStack(app, 'NagComp', { env, config: devConfig });
@@ -469,10 +1044,42 @@ describe('CDK Nag Compliance', () => {
       const errors = Annotations.fromStack(stack).findError('*', Match.stringLikeRegexp('AwsSolutions-.*'));
       expect(errors).toHaveLength(0);
     }
+    expectNoNagFindings([enc, mon, comp, backupStack, net]);
+  });
+
+  test('prodConfig: all five stacks synthesize and pass CDK Nag AwsSolutionsChecks', () => {
+    const app = newApp();
+    const enc = new EncryptionStack(app, 'NagProdEnc', { env, config: prodConfig });
+    const stacks = [
+      enc,
+      new NetworkStack(app, 'NagProdNet', { env, config: prodConfig }),
+      new MonitoringStack(app, 'NagProdMon', { env, config: prodConfig, kmsKey: enc.auditKey }),
+      new ComplianceStack(app, 'NagProdComp', { env, config: prodConfig }),
+      new BackupStack(app, 'NagProdBackup', { env, config: prodConfig }),
+    ];
+    Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
+    const assembly = app.synth();
+    expect(assembly.stacks.map((s) => s.stackName).sort()).toEqual(stacks.map((s) => s.stackName).sort());
+    expectNoNagFindings(stacks);
+  });
+
+  test('ComplianceStack with createConfigRecorder and the singleton opt-outs pass CDK Nag AwsSolutionsChecks', () => {
+    const app = newApp();
+    const stacks = [
+      new ComplianceStack(app, 'NagCompRecorder', { env, config: { ...devConfig, createConfigRecorder: true } }),
+      new ComplianceStack(app, 'NagCompProdRecorder', { env, config: { ...prodConfig, createConfigRecorder: true } }),
+      new ComplianceStack(app, 'NagCompNoSingletons', {
+        env,
+        config: { ...devConfig, enableSecurityHub: false, enableAccessAnalyzer: false },
+      }),
+    ];
+    Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
+    app.synth();
+    expectNoNagFindings(stacks);
   });
 
   test('NetworkStack variants (nat-dns-firewall, Kiro profile region) pass CDK Nag AwsSolutionsChecks', () => {
-    const app = new cdk.App();
+    const app = newApp();
     const natNet = new NetworkStack(app, 'NagNetNat', { env, config: natConfig });
     const use1Net = new NetworkStack(app, 'NagNetUse1', {
       env: { account, region: 'us-east-1' },

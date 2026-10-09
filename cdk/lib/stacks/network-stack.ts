@@ -1,6 +1,9 @@
 import * as cdk from 'aws-cdk-lib';
 import { Annotations } from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as kms from 'aws-cdk-lib/aws-kms';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import * as route53resolver from 'aws-cdk-lib/aws-route53resolver';
 import { Construct } from 'constructs';
 import { NagSuppressions } from 'cdk-nag';
@@ -23,11 +26,11 @@ import {
  * - No internet path by default (isolated subnets, no internet gateway, no NAT)
  * - VPC interface endpoints (AWS PrivateLink) for the AWS APIs used in this VPC,
  *   and for Kiro when the workload region is the Kiro profile region
- * - Security groups with HTTPS-only rules (see the NOTE on WorkspacesSG about
- *   EC2's default egress rule)
- * - Network ACL with HTTPS-only entries for defense-in-depth (see the NOTE at
- *   the NACL below)
- * - VPC Flow Logs for network monitoring (TRM 12.2)
+ * - Security groups with HTTPS-only rules and no default allow-all egress
+ * - Network ACL on the Endpoints subnets with HTTPS-only entries for
+ *   defense-in-depth
+ * - VPC Flow Logs for network monitoring (TRM 12.2), encrypted with a
+ *   dedicated customer-managed KMS key (TRM 10.2)
  *
  * Kiro connectivity: Kiro endpoints exist only in the Kiro profile regions
  * (us-east-1, eu-central-1; see config/kiro-endpoints.ts), so none are created
@@ -47,10 +50,42 @@ export interface NetworkStackProps extends cdk.StackProps {
   readonly config: KiroBankingConfig;
 }
 
+/** The egress rule CDK uses to express "no egress allowed" (it matches no traffic). */
+const MATCH_NO_TRAFFIC_EGRESS: ec2.CfnSecurityGroup.EgressProperty = {
+  cidrIp: '255.255.255.255/32',
+  description: 'Disallow all traffic',
+  ipProtocol: 'icmp',
+  fromPort: 252,
+  toPort: 86,
+};
+
+/**
+ * Makes sure EC2's default allow-all egress rule never applies to `sg`.
+ *
+ * EC2 gives every new security group an allow-all egress rule and removes it
+ * only when the group itself declares inline egress rules (SecurityGroupEgress).
+ * CDK renders security-group-to-security-group rules as separate
+ * AWS::EC2::SecurityGroupEgress resources and drops its "match no traffic"
+ * placeholder as soon as any egress rule is added, so a group whose only egress
+ * rules are separate resources would keep the allow-all rule. This keeps the
+ * placeholder inline whenever the group has no other inline egress rule.
+ */
+function restrictDefaultEgress(sg: ec2.SecurityGroup): void {
+  const cfnSecurityGroup = sg.node.defaultChild as ec2.CfnSecurityGroup;
+  const inlineEgress = cfnSecurityGroup.securityGroupEgress;
+  cfnSecurityGroup.securityGroupEgress = cdk.Lazy.uncachedAny({
+    produce: (context: cdk.IResolveContext) => {
+      const rules = context.resolve(inlineEgress);
+      return Array.isArray(rules) && rules.length > 0 ? rules : [MATCH_NO_TRAFFIC_EGRESS];
+    },
+  });
+}
+
 export class NetworkStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc;
   public readonly endpointSecurityGroup: ec2.SecurityGroup;
   public readonly workspacesSecurityGroup: ec2.SecurityGroup;
+  public readonly flowLogKey: kms.Key;
 
   constructor(scope: Construct, id: string, props: NetworkStackProps) {
     super(scope, id, props);
@@ -111,6 +146,56 @@ export class NetworkStack extends cdk.Stack {
       },
     });
 
+    // --- KMS key for the VPC Flow Logs log group (MAS TRM 10.2, 12.2) ---
+    this.flowLogKey = new kms.Key(this, 'FlowLogKey', {
+      alias: `kiro-banking-flow-logs-${config.environment}`,
+      description: 'Encrypts the VPC Flow Logs log group (MAS TRM 10.2, 12.2)',
+      enableKeyRotation: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      pendingWindow: cdk.Duration.days(30),
+    });
+
+    // The flow-log group keeps its CloudFormation-generated name (and its
+    // default two-year retention) so that the deployed group is not replaced;
+    // the key is associated in place.
+    const flowLog = this.vpc.node.findChild('VpcFlowLogs') as ec2.FlowLog;
+    if (!flowLog.logGroup) {
+      throw new Error('Expected the VPC flow log to deliver to a CloudWatch Logs log group');
+    }
+    const cfnFlowLogGroup = flowLog.logGroup.node.defaultChild as logs.CfnLogGroup;
+    cfnFlowLogGroup.kmsKeyId = this.flowLogKey.keyArn;
+
+    // Key policy pattern from
+    // https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/encrypt-log-data-kms.html
+    // The log group's ARN cannot be referenced here (the group refers to the
+    // key, so that would be a circular dependency). CloudFormation names the
+    // group "<stack name>-<logical ID>-<random suffix>", so the encryption
+    // context is matched on that prefix: only this log group can use the key.
+    this.flowLogKey.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowCloudWatchLogsFlowLogGroup',
+        principals: [new iam.ServicePrincipal(`logs.${region}.amazonaws.com`)],
+        actions: [
+          'kms:Encrypt*',
+          'kms:Decrypt*',
+          'kms:ReEncrypt*',
+          'kms:GenerateDataKey*',
+          'kms:Describe*',
+        ],
+        resources: ['*'],
+        conditions: {
+          ArnLike: {
+            'kms:EncryptionContext:aws:logs:arn': this.formatArn({
+              service: 'logs',
+              resource: 'log-group',
+              resourceName: `${this.stackName}-${this.getLogicalId(cfnFlowLogGroup)}-*`,
+              arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
+            }),
+          },
+        },
+      }),
+    );
+
     // --- Security Group: VPC Endpoints ---
     this.endpointSecurityGroup = new ec2.SecurityGroup(this, 'EndpointSG', {
       vpc: this.vpc,
@@ -122,17 +207,17 @@ export class NetworkStack extends cdk.Stack {
     // --- Security Group: WorkSpaces ---
     // The description is kept unchanged in every egress mode: changing it would
     // force a replacement, which fails because the group name is fixed.
-    // NOTE: in egress.mode 'none' the only egress rule is the separate
-    // security-group-to-security-group rule below, so the template has no inline
-    // egress rule and EC2 keeps its default allow-all egress rule on this group
-    // (the isolated subnets still have no route to the internet).
-    // In 'nat-dns-firewall' mode the inline HTTPS rule replaces the default rule.
+    // Egress: HTTPS to the endpoint security group (a separate rule resource),
+    // plus HTTPS to any IPv4 address in 'nat-dns-firewall' mode (inline).
+    // restrictDefaultEgress() keeps an inline "match no traffic" rule in 'none'
+    // mode so that EC2's default allow-all egress rule is removed.
     this.workspacesSecurityGroup = new ec2.SecurityGroup(this, 'WorkspacesSG', {
       vpc: this.vpc,
       securityGroupName: `kiro-workspaces-sg-${config.environment}`,
       description: 'Security group for WorkSpaces - outbound to VPC endpoints only',
       allowAllOutbound: false,
     });
+    restrictDefaultEgress(this.workspacesSecurityGroup);
 
     // WorkSpaces -> VPC Endpoints (HTTPS only)
     this.workspacesSecurityGroup.addEgressRule(
@@ -263,12 +348,15 @@ export class NetworkStack extends cdk.Stack {
     }
 
     // --- Network ACLs (defense-in-depth) ---
-    // NOTE: this NACL has no subnet association, so its entries do not filter
-    // traffic yet. Associating it (e.g. subnetSelection: { subnetGroupName:
-    // 'Endpoints' }) changes the deployed network; test that change first.
+    // Associated with the Endpoints subnets (which only hold interface endpoint
+    // network interfaces). NACLs are stateless: the entries allow HTTPS (443) and
+    // ephemeral return traffic to and from the VPC CIDR only. Clients outside
+    // the VPC CIDR (peered VPCs, Transit Gateway, on-premises) need extra entries.
+    // Traffic to the Amazon DNS server is not filtered by NACLs.
     const endpointNacl = new ec2.NetworkAcl(this, 'EndpointNacl', {
       vpc: this.vpc,
       networkAclName: `kiro-endpoint-nacl-${config.environment}`,
+      subnetSelection: endpointSubnets,
     });
 
     // Inbound: Allow HTTPS from VPC CIDR
@@ -311,7 +399,8 @@ export class NetworkStack extends cdk.Stack {
     NagSuppressions.addResourceSuppressions(endpointNacl, [
       {
         id: 'AwsSolutions-VPC3',
-        reason: 'NACLs are required for MAS TRM Section 11.2 defense-in-depth network security alongside security groups',
+        reason: 'Intentional MAS TRM 11.2 defense-in-depth: this NACL is associated with the Endpoints subnets and, ' +
+          'in addition to the security groups, allows only HTTPS (443) and ephemeral return traffic within the VPC CIDR',
       },
     ], true);
 
