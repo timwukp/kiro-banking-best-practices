@@ -190,23 +190,36 @@ aws q update-encryption-configuration \
 
 ### 7.2 Data Location & Residency
 
-> **⚠️ Data Location Note:** Kiro (Amazon Q Developer) profiles currently exist only in **us-east-1 (N. Virginia)** or **eu-central-1 (Frankfurt)** — there is **no** Singapore (`ap-southeast-1`) profile option. Your content, prompt logs, and user activity reports are stored in the profile region by architectural requirement. MAS TRM Guidelines do **not** impose a data localisation mandate — data residency in Singapore is a customer preference, not a regulatory requirement.
+> **⚠️ Data Location Note:** Kiro profiles exist only in **us-east-1 (N. Virginia)** and **eu-central-1 (Frankfurt)**, plus AWS GovCloud (US-East) and AWS GovCloud (US-West) for US public-sector customers. There is **no** Singapore (`ap-southeast-1`) profile option. Your content, prompt logs, and user activity reports are stored in the profile region by architectural requirement. MAS TRM Guidelines do **not** impose a data localisation mandate — data residency in Singapore is a customer preference, not a regulatory requirement.
 
 **Clarification: Data Residency vs. Regulatory Requirement**
 
 MAS TRM Guidelines focus on **data protection controls** (encryption, access control, audit trails) rather than prescribing where data must physically reside. Financial institutions may choose to keep data in Singapore for business, contractual, or risk-appetite reasons, but this is not a MAS-imposed localisation mandate.
 
-**Regional Reality for Kiro:**
-- **Profile / Service Region:** Kiro profiles are hosted in `us-east-1` or `eu-central-1` only. Content (including customizations) is stored in the profile region. There is no `ap-southeast-1` profile.
-- **Logging:** Prompt log and user activity report S3 buckets **must** reside in the AWS Region where the Kiro profile was installed. Cross-account buckets are not supported.
-- **Inference:** Kiro is powered by Amazon Bedrock and uses cross-region inference. Requests are kept within the AWS Regions of the profile's geography — a US profile stays within US Regions (us-east-1, us-west-2, us-east-2) and does **not** route to Singapore.
-- **Mitigation (if residency is preferred):** Use S3 Cross-Region Replication (CRR) to replicate the profile-region log bucket to `ap-southeast-1` for local access. This produces a regional **copy**; the authoritative log location remains the profile region.
-- **VPC / network:** Developer traffic can still use `ap-southeast-1` VPC endpoints / PrivateLink for network-layer isolation, but this is connectivity hygiene — it does not change where Kiro processes or stores data.
+**Two regions to keep apart:**
+- **Workload region (`ap-southeast-1`):** the institution's own infrastructure — VPC, WorkSpaces VDI, CloudTrail, AWS Config and AWS Backup (the CDK stacks in this repo). IAM Identity Center can also be in `ap-southeast-1`, so identities and subscriptions can stay in Singapore.
+- **Kiro profile region (`us-east-1` or `eu-central-1`):** where Kiro stores and processes prompts, code context and responses, and where the prompt-log bucket, the user activity report bucket and the Kiro customer-managed KMS key (Section 7.1) must be created.
 
-**References:**
-- [AWS Docs: Cross-region processing in Amazon Q Developer](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/cross-region-processing.html)
+**Regional Reality for Kiro:**
+- **Profile / Service Region:** Kiro profiles are hosted in `us-east-1` or `eu-central-1` (or AWS GovCloud (US)). Content (including customizations) is stored in the profile region. There is no `ap-southeast-1` profile. The Identity Center region can differ from the profile region.
+- **Logging:** Prompt log and user activity report S3 buckets **must** reside in the AWS Region where the Kiro profile was installed. Cross-account buckets are not supported. From Kiro IDE 1.2, telemetry and activity data are also sent to the profile region.
+- **Inference:** Kiro is powered by Amazon Bedrock and uses cross-region inference. For Geography-scope models (including all Claude models), requests stay within the AWS Regions of the profile's geography: a US profile uses US Regions (`us-east-1`, `us-west-2`, `us-east-2`) and a Europe profile uses Europe Regions (`eu-central-1`, `eu-west-1`, `eu-west-3`, `eu-north-1`, `eu-south-1`, `eu-south-2`). There is no Asia Pacific geography, so these requests do **not** route to Singapore. Global-scope models are the exception (next bullet).
+- **Inference scope:** inference scope is set per model (Inference endpoint regions table on the [Kiro models page](https://kiro.dev/docs/models/)). Geography-scope models, which include all Claude models, use the US endpoint for `us-east-1` profiles and the EU endpoint for `eu-central-1` profiles and stay within that geography. Global-scope models (currently GPT-5.6 Sol, Terra and Luna) may be processed in supported commercial AWS Regions worldwide, including outside the endpoint geography, and use the US endpoint even for `eu-central-1` profiles. Cross-region inference does not change where Kiro stores data, and lifecycle status and inference scope are independent: experimental or preview status does not determine routing. Kiro has no setting to disable cross-region inference. The control is model governance: manage the approved model list (Kiro console > Settings > Shared settings > Model availability) so that Global-scope models are not available until an administrator approves them, and review preview terms such as Claude Fable 5.1's 30-day retention.
+- **Cloud Sessions (Kiro Web):** run in `us-east-1` only, and customer-managed KMS keys, MCP configuration and model availability settings do not apply to them. They are off by default for IAM Identity Center organisations; keep them off unless they have been assessed.
+- **Mitigation (if residency is preferred):** Use S3 Cross-Region Replication (CRR) to replicate the profile-region log bucket to `ap-southeast-1` for local access. This produces a regional **copy**; the authoritative log location remains the profile region.
+- **VPC / network:** There are no Kiro VPC endpoints in `ap-southeast-1`. Kiro interface endpoints (`com.amazonaws.us-east-1.q`, `com.amazonaws.us-east-1.codewhisperer`, `com.amazonaws.eu-central-1.q`) exist only in the profile region, and sign-in and downloads use public HTTPS endpoints that must be allowlisted. See Part 1, Section 3 for the connectivity options. The network path does not change where Kiro processes or stores data.
+
+**What this means for a Singapore institution:** identity can stay in Singapore, but prompts, code context and responses are stored and processed in the Kiro profile region and may be processed in other regions of the same geography (or worldwide for Global-scope models such as GPT-5.6). Treat Kiro use as a cross-border transfer:
+- Apply the PDPA Transfer Limitation Obligation (s26) to any personal data that can reach Kiro (Section 11).
+- Assess Kiro as a third-party service under MAS TRM 3.4 and the MAS outsourcing requirements (Section 12).
+- Keep customer information out of prompts and code context (banks: FSM-N05 para 9 and banking secrecy); use masked or synthetic test data.
+- Use model governance to exclude Global-scope models (and review preview terms such as Claude Fable 5.1's 30-day retention).
+
+**References (verified 2026-10-08):**
+- [Kiro Docs: Supported regions](https://kiro.dev/docs/enterprise/supported-regions/)
+- [Kiro Docs: Data protection — storage and cross-region inference](https://kiro.dev/docs/privacy-and-security/data-protection/)
+- [Kiro Docs: VPC endpoints](https://kiro.dev/docs/privacy-and-security/vpc-endpoints/)
 - [Kiro Docs: Viewing per-user activity](https://kiro.dev/docs/cli/enterprise/monitor-and-track/user-activity/)
-- [Amazon Q Developer European Region announcement (us-east-1 / eu-central-1)](https://aws.amazon.com/blogs/devops/amazon-q-developer-european-region/)
 - [Amazon S3 Cross-Region Replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html)
 
 ### 7.3 Opt-Out Configuration
@@ -239,7 +252,7 @@ aws q update-organization-settings \
 | Access Control | 9.1 | IAM IDC + MFA | CloudTrail logs |
 | Encryption | 10.1 (TLS), 10.2 (key management) | TLS 1.2+ + KMS customer-managed keys with rotation | KMS key policy |
 | Data Security | 11.1 | DLP + Encryption | DLP reports |
-| Network Security | 11.2 | VPC + PrivateLink | VPC flow logs |
+| Network Security | 11.2 | Private VPC + egress allowlist (PrivateLink to Kiro only in the profile region) | VPC flow logs |
 | Audit Logging & Monitoring | 12.2 | CloudTrail + CloudWatch | S3 audit bucket |
 
 TRM 15.1 (IT Audit) covers the independent audit function, which uses these logs as evidence; it is not the logging control itself. The matrix shows where controls support each TRM section. Each institution remains responsible for its own compliance assessment.
@@ -610,7 +623,7 @@ aws workspaces reboot-workspaces --reboot-workspace-requests WorkspaceId=ws-xxxx
 | **Accuracy** | Reasonable effort to ensure data is accurate | Validation logic in Kiro-generated code |
 | **Protection** | Reasonable security to protect personal data | Encryption, DLP, VPC isolation |
 | **Retention Limitation** | Data not kept longer than necessary | Kiro prompt logs subject to retention policy |
-| **Transfer Limitation** | Cross-border transfer restrictions | Data residency in ap-southeast-1 (Singapore) |
+| **Transfer Limitation** | Cross-border transfer restrictions; Kiro stores and processes prompts and code context in its profile region (`us-east-1` or `eu-central-1`), not Singapore (Section 7.2) | Keep personal data out of prompts; s26 safeguards for any personal data that reaches Kiro (see below) |
 | **Data Breach Notification** | Assess expeditiously whether a breach is notifiable; notify PDPC no later than 3 calendar days after determining it is notifiable (see 11.4) | Incident response plan must include PDPC notification |
 
 - **Transfer Limitation Obligation (PDPA s26):** if personal data is transferred outside Singapore (for example, personal data in prompts or code context that Kiro processes in another region; see Section 7.2), the organisation must ensure the recipient protects it to a standard comparable to the PDPA. Under the PDP Regulations 2021 this is done through legally enforceable obligations (such as contract clauses that specify the destination countries, or binding corporate rules), specified certifications (APEC/Global CBPR, or PRP for data intermediaries), or one of the deemed-compliance cases. The organisation remains responsible when its data intermediary or cloud provider transfers the data overseas (PDPC Advisory Guidelines on Key Concepts, ch. 19).
@@ -680,8 +693,8 @@ aws workspaces reboot-workspaces --reboot-workspace-requests WorkspaceId=ws-xxxx
 - [ ] DLP rules enforce PDPA data categories in Kiro prompts
 - [ ] Developer training covers PDPA obligations when using AI tools
 - [ ] Prompt logging enabled with a documented, purpose-based retention period (PDPA s25 sets no fixed maximum; keep logs only as long as needed for legal or business purposes)
-- [ ] Data residency confirmed in Singapore region (ap-southeast-1)
-- [ ] Cross-region inference disabled for PDPA-regulated workloads
+- [ ] Data location documented: workload data in `ap-southeast-1` (if required by policy); Kiro content, prompt logs and user activity reports in the Kiro profile region (`us-east-1` or `eu-central-1`), with possible processing in other regions of the same geography (Section 7.2)
+- [ ] Approved model list managed so that Global-scope models (inference in AWS Regions worldwide) are excluded unless assessed, and preview terms such as Claude Fable 5.1's 30-day retention are reviewed; Kiro has no setting to disable cross-region inference
 - [ ] Transfer limitation (s26) safeguards documented for any personal data processed outside Singapore
 - [ ] Data breach notification process includes PDPC (assessment generally within 30 days; notify PDPC ≤3 calendar days after determining the breach is notifiable)
 - [ ] Code review flags NRIC numbers used for authentication (cease by 31 December 2026)
@@ -732,7 +745,7 @@ Data breach discovered
 | **Service** | AI-assisted software development (Kiro IDE/CLI) |
 | **Materiality** | Assess based on: impact on business operations, data sensitivity, customer impact |
 | **Data Involved** | Source code, development prompts, configuration data |
-| **Jurisdiction** | Service hosted in AWS regions; data residency configurable |
+| **Jurisdiction** | Kiro profile region `us-east-1` or `eu-central-1` (no Singapore option); inference may use other regions of the same geography, and Global-scope models (currently GPT-5.6) may be processed in AWS Regions worldwide; IAM Identity Center can stay in `ap-southeast-1`. Treat as offshore processing and a cross-border transfer (Sections 7.2 and 11) |
 
 ### 12.2 MAS Outsourcing Requirements Mapping
 
@@ -742,7 +755,7 @@ Data breach discovered
 | **Third-Party Services (TRM 3.4)** | Third-party risk management for Kiro, MCP servers and model providers, even where not outsourcing | Third-party register entry |
 | **Due Diligence** | Review AWS assurance reports and confirm which ones cover Kiro (see 12.3) | AWS Artifact reports |
 | **Contractual Protections** | AWS Enterprise Agreement / Addendum | Legal review |
-| **Data Protection** | Encryption, DLP, VPC isolation, data residency | Technical controls documented |
+| **Data Protection** | Encryption (customer-managed KMS key in the profile region), DLP, VPC isolation of the workload region, model allow list, documented data location (Section 7.2) | Technical controls documented |
 | **Business Continuity** | Fallback to non-AI development if Kiro unavailable | BCP documentation |
 | **Audit and Access Rights** | Contractual audit and access rights for the FI and MAS; AWS compliance reports via AWS Artifact | Quarterly review |
 | **Concentration Risk** | Assess dependency on single AI coding tool | Risk assessment |
@@ -825,9 +838,11 @@ The Monetary Authority of Singapore published the **Principles to Promote Fairne
 **Prompt Logging for Audit:**
 ```bash
 # Enable comprehensive prompt logging
+# The S3 bucket and KMS key must be in the Kiro profile region (us-east-1 or eu-central-1)
+# and in the subscribing account, not in the ap-southeast-1 workload region (Section 7.2)
 aws q put-prompt-logging-configuration \
   --s3-bucket-name kiro-prompts-<account-id> \
-  --kms-key-id arn:aws:kms:ap-southeast-1:account:key/xxxxx
+  --kms-key-id arn:aws:kms:us-east-1:account:key/xxxxx
 ```
 
 **What is Logged:**
@@ -894,7 +909,7 @@ The **Association of Banks in Singapore (ABS)** published the Cloud Computing Im
 |-----------------|---------------------|
 | Data classification before cloud adoption | Classify code/data touched by Kiro per bank's data policy |
 | Cloud service provider due diligence | AWS due diligence; confirm which assurance reports cover Kiro (Section 12.3) |
-| Data residency and sovereignty | Configure ap-southeast-1, disable cross-region inference |
+| Data residency and sovereignty | Workload infrastructure in `ap-southeast-1`; Kiro profile region is `us-east-1` or `eu-central-1` (no Singapore option, no setting to disable cross-region inference). Document the data location, apply PDPA s26 safeguards, keep customer data out of prompts, and exclude Global-scope models via the model allow list (Section 7.2) |
 | Access control and identity management | IAM Identity Center + Enterprise IdP + MFA |
 | Encryption requirements | TLS 1.2+ in transit, KMS at rest |
 | Incident management | Incident response plan (Section 10) |
@@ -940,7 +955,7 @@ TRM section numbers follow the MAS Technology Risk Management Guidelines (Januar
 | **MAS TRM** | 10.1 | Cryptographic Algorithm and Protocol | TLS 1.2+ in transit | Part 2, Section 7 |
 | **MAS TRM** | 10.2 | Cryptographic Key Management | KMS customer-managed keys + rotation | Part 2, Section 7.1 |
 | **MAS TRM** | 11.1 | Data Security | DLP + encryption + PDPA controls | Part 1, Section 4.1.3 |
-| **MAS TRM** | 11.2 | Network Security | VPC endpoints + PrivateLink + SG + NACLs | Part 1, Section 3 |
+| **MAS TRM** | 11.2 | Network Security | VPC endpoints + SG + NACLs + egress allowlist (PrivateLink to Kiro only in the profile region) | Part 1, Section 3 |
 | **MAS TRM** | 11.3, 11.4 | System Security; Virtualisation Security | WorkSpaces VDI hardening | Part 1, Section 4 |
 | **MAS TRM** | 12.2 | Cyber Event Monitoring and Detection | CloudTrail + CloudWatch + monitoring | Part 2, Section 8 |
 | **MAS TRM** | 12.3 | Incident Response | Escalation matrix + MAS notification | Part 2, Section 10 |

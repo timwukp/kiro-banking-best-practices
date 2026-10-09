@@ -29,7 +29,7 @@ Enterprise (console, account, compliance).
 | 2026-04-13 | CLI | 2.0 | Admin control of API key generation (governance settings) |
 | 2026-03-27 | Gen | — | Subscription data CSV export from console |
 | 2026-03-11 | IDE | 0.11 | **MCP Registry Governance** — HTTPS-hosted JSON allow-list of approved MCP servers, version-pinned, 24h sync |
-| 2026-03-11 | IDE | 0.11 | **Model Governance** — approved-model list + default model (data-residency control) |
+| 2026-03-11 | IDE | 0.11 | **Model Governance** — approved-model list + default model (data-location control: exclude Global-scope models, whose inference may run in AWS Regions worldwide) |
 | 2026-02-05 | IDE | 0.9 | Web Tools Governance (disable web search/fetch org-wide) |
 | 2026-02-05 | IDE | 0.9 | Custom Extension Registry (private, vetted extensions vs Open VSX) |
 | 2026-02-04 | CLI | 1.25.0 | Enterprise Web Tools Governance + Subagent Access Control (`availableAgents`/`trustedAgents`) |
@@ -56,7 +56,7 @@ Enterprise (console, account, compliance).
 | 2026-01-16 | CLI | 1.24.0 | Granular URL permissions for `web_fetch` (regex allow/block) |
 | 2025-09-04 | IDE | 0.2.38 | Enhanced dangerous-shell-command detection (manual review required) |
 
-### Compliance & Data Residency
+### Compliance & Data Location
 
 | Date | Surface | Version | Feature |
 |------|---------|---------|---------|
@@ -85,13 +85,25 @@ mechanism behind the Tier 1/2/3 MCP model in the main SDLC guide.
 ### 2.2 Model Governance (IDE 0.11)
 Curate an approved model list and set a default model org-wide.
 
-- Console → Settings → Shared settings → Model availability.
-- Critical for **data residency**: exclude experimental models that use
-  *global* cross-region inference until they reach GA with regional inference.
+- Console → Settings → Shared settings → Model availability → Manage approved list.
+- Critical for **data location**: inference scope is set per model (Inference
+  endpoint regions table on the [models page](https://kiro.dev/docs/models/)).
+  Geography-scope models, which include all Claude models, use cross-region
+  inference within the profile's geography (US or Europe). Global-scope models
+  (currently GPT-5.6 Sol, Terra and Luna) may be processed in supported
+  commercial AWS Regions worldwide and use the US endpoint even for
+  `eu-central-1` profiles. Experimental or preview status does not determine
+  routing. Kiro has no setting to disable cross-region inference, so the allow
+  list is the control: exclude Global-scope models (and review preview terms
+  such as Claude Fable 5.1's 30-day retention).
+- When the list is managed, new models are not available until an administrator
+  adds them.
 - Only approved models appear in the selector across IDE and CLI.
 
 > **MAS mapping:** TRM 3.4 / 4.3 (third-party services and risk assessment of model
-> providers), 11.1 (Data Security), data-residency obligations.
+> providers), 11.1 (Data Security). The allow list also supports the PDPA Transfer
+> Limitation Obligation (s26) assessment of where prompts are processed; MAS TRM
+> itself imposes no data-localisation mandate.
 
 ### 2.3 Web Tools Governance (IDE 0.9 / CLI 1.25.0)
 Disable `web_search` and `web_fetch` organization-wide to prevent
@@ -117,8 +129,11 @@ message counts; console shows user emails; subscription data is CSV-exportable.
 
 - **External IdP (Okta / Entra ID) + SCIM** (IDE 0.9.40 / CLI 1.25.1):
   Connect alongside AWS IAM Identity Center; auto-sync users/groups via SCIM.
-  Configure once for both IDE and CLI. Continue to block social logins and
-  AWS Builder ID at the firewall per the main guide.
+  Configure once for both IDE and CLI. Restrict sign-in to IAM Identity Center
+  with the managed-settings `signin_method` rule (client-enforced; IDE 1.2+ /
+  CLI 2.25+) and block the social sign-in host
+  (`cognito-identity.us-east-1.amazonaws.com`) at the firewall. Do not block
+  `prod.us-east-1.auth.desktop.kiro.dev`: all sign-in methods use it.
 - **Device Flow / Remote Auth** (CLI 1.24.0, 2.1): For SSH/SSM/container/VDI
   sessions without port forwarding. Useful for Amazon WorkSpaces VDI.
 
@@ -168,8 +183,18 @@ auditable for approved Tier 2 servers.
 
 ---
 
-## 5. Compliance & Data Residency
+## 5. Compliance & Data Location
 
+- **Profile region** (verified 2026-10-08 against
+  https://kiro.dev/docs/enterprise/supported-regions/ and
+  https://kiro.dev/docs/privacy-and-security/data-protection/): commercial
+  Kiro profiles exist only in `us-east-1` and `eu-central-1` (plus AWS GovCloud
+  (US)); there is no Singapore profile region. Content, prompt logs and user
+  activity reports are stored in the profile region; IAM Identity Center can
+  stay in `ap-southeast-1`. Inference may run in other regions of the same
+  geography; Global-scope models (currently GPT-5.6 Sol, Terra and Luna) may be
+  processed in AWS Regions worldwide (Section 2.2). For a Singapore
+  institution this is a cross-border transfer: see Part 2, Section 7.2.
 - **HIPAA eligible** (2026-05-26): Kiro IDE and CLI only. **Kiro Web is not
   HIPAA eligible** — exclude it from regulated workloads.
 - **AWS GovCloud (US)** (2026-02-18): IAM Identity Center auth (GovCloud Start
@@ -186,7 +211,7 @@ auditable for approved Tier 2 servers.
 | Control | Setting | Rationale |
 |---------|---------|-----------|
 | MCP servers | Registry allow-list, version-pinned | Tier 1/2/3 enforcement |
-| Models | Approved list, regional inference only | Data residency |
+| Models | Approved list; exclude Global-scope models (review preview terms such as Fable 5.1's 30-day retention) | Data location: Geography-scope models (all Claude models) stay within the profile's geography; Global-scope models (GPT-5.6) may be processed worldwide |
 | Web tools | Disabled org-wide (or strict `web_fetch` regex) | Prevent data egress |
 | Subagents | `availableAgents`/`trustedAgents` allow-list | Block unvetted agents |
 | Tool trust | Narrowest scope; no universal `*` | Least privilege |
@@ -199,7 +224,7 @@ auditable for approved Tier 2 servers.
 ## 7. Adoption Checklist
 
 - [ ] MCP registry published over HTTPS and configured in console (version-pinned)
-- [ ] Approved-model list set; experimental/global-inference models excluded
+- [ ] Approved-model list set; Global-scope models excluded (and preview terms such as Fable 5.1's 30-day retention reviewed)
 - [ ] Web search/fetch disabled or `web_fetch` restricted to AWS docs domains
 - [ ] `availableAgents`/`trustedAgents` allow-lists defined
 - [ ] Granular tool-trust scopes documented for standard workflows

@@ -33,7 +33,7 @@ See [README.md - Security Architecture](README.md#security-architecture) for ful
 | Phase | Week | Focus | Key Deliverable |
 |-------|------|-------|-----------------|
 | 1 | 1-2 | Identity & Access | Enterprise IdP integration + MFA |
-| 2 | 2-3 | Network Security | VPC + PrivateLink endpoints |
+| 2 | 2-3 | Network Security | Private VPC + allowlisted HTTPS egress (Kiro PrivateLink only in the profile region) |
 | 3 | 3-4 | VDI Deployment | WorkSpaces + DLP + GPO |
 | 4 | 4-5 | MCP Governance | Centralized whitelist + permissions |
 | 5 | 5-6 | Monitoring & Compliance | CloudTrail + validation scripts |
@@ -49,7 +49,7 @@ See [README.md - Security Architecture](README.md#security-architecture) for ful
 | 6.1 / 6.3 Secure Coding & DevSecOps | Review of AI-generated code; segregation of duties | Code review gates + SAST/DAST + human approval before merge |
 | 9.1 User Access Mgmt | Authentication & authorization | Enterprise IdP + MFA + session management + RBAC |
 | 9.2 Privileged Access | Administrative accounts | MFA for admin access (banks: FSM-N06 paras 4.1, 4.6) |
-| 9.3 Remote Access | Secure remote connectivity | WorkSpaces VDI over VPC + PrivateLink |
+| 9.3 Remote Access | Secure remote connectivity | WorkSpaces VDI in a private VPC with allowlisted HTTPS egress |
 | 10.1 / 10.2 Cryptography | Algorithms & protocols; key management | TLS 1.2+ in transit, KMS customer-managed keys with rotation at rest |
 | 11.1 Data Security | Data protection controls | DLP agents + encryption + PDPA controls |
 | 11.2 Network Security | Network segmentation | VPC endpoints + security groups + NACLs |
