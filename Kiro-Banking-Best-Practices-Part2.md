@@ -608,7 +608,7 @@ Set the posture per repository; the mechanisms are described in Section 6.1.
 - Use `.kiro/steering` for project-specific guidance
 - Avoid uploading large binary files
 
-**Steering File Example:** steering files are Markdown files in `.kiro/steering/` (workspace) or `~/.kiro/steering/` (global). Optional frontmatter must be at the very top of the file; `inclusion: always` is the default. The real file is [`.kiro/steering/banking-standards.md`](.kiro/steering/banking-standards.md), which uses the default and so has no frontmatter.
+**Steering File Example:** steering files are Markdown files in `.kiro/steering/` (workspace) or `~/.kiro/steering/` (global). Optional frontmatter must be at the very top of the file; `inclusion: always` is the default. The real file is [`.kiro/steering/banking-standards.md`](.kiro/steering/banking-standards.md), which declares `inclusion: always` explicitly.
 
 ```markdown
 ---
@@ -929,18 +929,20 @@ This block and the DLP rules below are illustrative policy definitions for your 
 
 **DLP Policy Enhancement for PDPA:**
 
+> The patterns below are vendor-neutral examples. The maintained, tested catalogue (NRIC/FIN incl. M-series, cards with separators and the Mastercard 2-series, Luhn and checksum notes) is [`.kiro/skills/pii-detection/references/singapore-pii-patterns.md`](.kiro/skills/pii-detection/references/singapore-pii-patterns.md).
+
 ```json
 {
   "pdpa_dlp_rules": [
     {
       "name": "Block NRIC in Kiro Prompts",
-      "pattern": "[STFG]\\d{7}[A-Z]",
+      "pattern": "\\b[STFGM]\\d{7}[A-Z]\\b",
       "action": "block_and_alert",
       "notification": "PDPA violation: NRIC detected in AI prompt"
     },
     {
       "name": "Block Credit Card in Kiro Prompts",
-      "pattern": "\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\\b",
+      "pattern": "\\b(?:4\\d{3}(?:[ -]?\\d{4}){2}[ -]?\\d{1,7}|(?:5[1-5]\\d{2}|2(?:2(?:2[1-9]|[3-9]\\d)|[3-6]\\d{2}|7(?:[01]\\d|20)))(?:[ -]?\\d{4}){3}|3[47]\\d{2}[ -]?\\d{6}[ -]?\\d{5})\\b",
       "action": "block_and_alert",
       "notification": "PDPA violation: Credit card number detected"
     },
@@ -1129,7 +1131,7 @@ The Monetary Authority of Singapore published the **Principles to Promote Fairne
 **Mitigation:**
 - Kiro-generated financial logic must undergo additional review by domain experts
 - Automated bias testing in CI/CD pipeline for models and decision logic
-- Steering files should include bias-awareness instructions. The repository's file is [`.kiro/steering/fairness.md`](.kiro/steering/fairness.md) (always included). To include such a file only when the agent works on matching files, use `fileMatch` frontmatter:
+- Steering files should include bias-awareness instructions. The repository's file is [`.kiro/steering/fairness.md`](.kiro/steering/fairness.md), which uses `inclusion: fileMatch` so it loads only for model, scoring, decisioning, pricing, credit and underwriting files. To include such a file only when the agent works on matching files, use `fileMatch` frontmatter:
 
 ```markdown
 ---
