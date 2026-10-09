@@ -6,23 +6,34 @@ These files are local copies of Kiro platform documentation, included for offlin
 
 | File | Source URL | Snapshot Date |
 |------|-----------|---------------|
-| [mcp-configuration.md](mcp-configuration.md) | https://kiro.dev/docs/mcp/configuration/ | 2026-02-25 |
-| [mcp-security.md](mcp-security.md) | https://kiro.dev/docs/mcp/security/ | 2026-02-25 |
+| [mcp-configuration.md](mcp-configuration.md) | https://kiro.dev/docs/mcp/configuration/ + https://kiro.dev/docs/enterprise/governance/mcp/ | 2026-10-08 |
+| [mcp-security.md](mcp-security.md) | https://kiro.dev/docs/mcp/security/ + https://kiro.dev/docs/mcp/registry/ | 2026-10-08 |
 | [mcp-servers.md](mcp-servers.md) | https://kiro.dev/docs/mcp/servers/ | 2026-02-25 |
-| [mcp-usage.md](mcp-usage.md) | https://kiro.dev/docs/mcp/usage/ | 2026-02-25 |
-| [privacy-and-security.md](privacy-and-security.md) | https://kiro.dev/docs/privacy-and-security/ | 2026-02-25 |
+| [mcp-usage.md](mcp-usage.md) | https://kiro.dev/docs/mcp/usage/ | 2026-10-08 |
+| [privacy-and-security.md](privacy-and-security.md) | https://kiro.dev/docs/privacy-and-security/ (data protection, firewalls, VPC endpoints, compliance) | 2026-10-08 |
+| [permissions-and-managed-settings.md](permissions-and-managed-settings.md) † | https://kiro.dev/docs/permissions/ + https://kiro.dev/docs/enterprise/governance/permissions/ + https://kiro.dev/docs/enterprise/governance/sign-in/ + https://kiro.dev/docs/hooks/ + https://kiro.dev/docs/custom-agents/ | 2026-10-08 |
 | [powers.md](powers.md) | https://kiro.dev/blog/introducing-powers/ | 2026-02-25 |
 | [skills-cli.md](skills-cli.md) | https://kiro.dev/docs/cli/skills/ | 2026-02-25 |
 | [skills-ide.md](skills-ide.md) | https://kiro.dev/docs/skills/ | 2026-02-25 |
 | [anthropic-skills-reference.md](anthropic-skills-reference.md) | https://github.com/anthropics/skills | 2026-02-25 |
 | [security-governance-features.md](security-governance-features.md) † | https://kiro.dev/changelog/ + https://kiro.dev/changelog/cli/ | 2026-06-04 |
-| [agent-runtime-governance.md](agent-runtime-governance.md) ‡ | Original authored guidance (this repo) | 2026-06-04 |
-| [mdm-endpoint-enforcement.md](mdm-endpoint-enforcement.md) ‡ | Original authored guidance (this repo) | 2026-06-04 |
-| [mdm-test-evidence.md](mdm-test-evidence.md) ‡ | Original authored guidance (this repo) | 2026-06-04 |
-| [chaos-pentest-evidence.md](chaos-pentest-evidence.md) ‡ | Original authored guidance (this repo) | 2026-06-05 |
+| [agent-runtime-governance.md](agent-runtime-governance.md) ‡ | Original authored guidance (this repo) | 2026-10-08 |
+| [mdm-endpoint-enforcement.md](mdm-endpoint-enforcement.md) ‡ | Original authored guidance (this repo) | 2026-10-08 |
+| [mdm-test-evidence.md](mdm-test-evidence.md) ‡ | Original authored guidance (this repo) | 2026-06-04 (historical; note added 2026-10-08) |
+| [chaos-pentest-evidence.md](chaos-pentest-evidence.md) ‡ | Original authored guidance (this repo) | 2026-06-05 (historical; note added 2026-10-08) |
 
-† Compiled, banking-focused reference synthesized from the changelogs — not a verbatim snapshot of a single page.
+† Compiled, banking-focused reference synthesized from several official pages or the changelogs — not a verbatim snapshot of a single page.
 ‡ Original guidance authored for this repo (Layer 4 agent runtime governance) — not a snapshot of an external page.
+
+## Deployable configuration
+
+The reference snapshots above describe Kiro behaviour. The deployable files that implement it live outside this folder:
+
+| Folder | Contents |
+|--------|----------|
+| [`../managed-settings/`](../managed-settings/) | Admin policy `managed-settings.json` (Option A: IAM Identity Center; Option B: external IdP), user `permissions.yaml` template, MCP registry example, deployment paths and validation commands |
+| [`../agent-hooks/`](../agent-hooks/) | Hook scripts and the `banking-secure` custom agent |
+| [`../mdm/`](../mdm/) | MDM / endpoint scripts that deploy the policy to the official OS paths |
 
 ## Maintenance
 

@@ -3,90 +3,190 @@
 
 > **Audience:** security architects, compliance officers, banking developers · **Purpose:** Sections 5–14 — MCP governance, SDLC, PDPA, FEAT, operations · **Prerequisites:** read Part 1 (Sections 1–4) first · ↩ [README](README.md)
 
+> **Kiro 1.x configuration (verified 2026-10-08 against the official Kiro docs).** Earlier versions of this part showed settings keys and commands that Kiro does not support. Remove them and use the documented mechanisms instead:
+>
+> | Removed (not a Kiro setting or command) | Use instead | Section |
+> |------------------------------------------|-------------|---------|
+> | `kiro.autopilot.enabled`, `kiro.supervised.requireApproval`, `kiro.mode`, `kiro.autoApprove`, `kiro.reviewRequired` | IDE autonomy setting `kiroAgent.agentAutonomy` plus permission rules | 6.1, 9.2 |
+> | `kiro.trustedCommands` | `allow` rules in `permissions.yaml` (Kiro IDE 1.0 replaced Trusted Commands and the Command Denylist) | 6.1 |
+> | `aws q update-encryption-configuration` | Kiro console > Settings > Encryption key | 7.1 |
+> | `aws q update-organization-settings`; `kiro.telemetry.enabled`, `kiro.shareContentWithAWS`, `kiro.codeReferences.enabled` | Enterprise users are opted out automatically; client settings in [`kiro-docs/privacy-and-security.md`](kiro-docs/privacy-and-security.md) | 7.3 |
+> | CloudTrail data resource `AWS::Q::Chat`; event name `InvokeMCPTool` | Management events, Kiro prompt logging, user activity reports and the local hook audit log | 5.3, 8.2 |
+> | `aws q put-prompt-logging-configuration` | Kiro console > Settings > Kiro Settings > Logging | 9.3 |
+> | `C:\ProgramData\Kiro\mcp.json` with `icacls` and a symlinked user file | MCP governance with a version-pinned registry, plus workspace trust | 5 |
+> | `kiro.codeGeneration` | Branch protection and CODEOWNERS in source control; admin `ask` on `git push` | 13.2 |
+> | YAML steering files (`banking-standards.yaml`) | Markdown steering files with frontmatter | 9.4, 13.4 |
+>
+> Deployable files: [`managed-settings/`](managed-settings/) (admin policy, user permissions template, MCP registry example) and [`agent-hooks/README.md`](agent-hooks/README.md) (hooks). Reference: [`kiro-docs/permissions-and-managed-settings.md`](kiro-docs/permissions-and-managed-settings.md).
+
 ---
 
 ## 5. MCP Server Security & Governance
 
-### 5.1 Centralized Whitelist Management
+MCP servers extend what the agent can reach, so treat each one as a third-party component (MAS TRM 3.4, 6.1.3). Kiro restricts MCP servers with these mechanisms:
 
-**Approved MCP Servers Configuration:**
+| Control | What it does | Where |
+|---------|--------------|-------|
+| **MCP governance** | MCP on/off toggle and **MCP Registry URL**. Only servers listed in the registry load | Kiro console > Settings > Shared settings |
+| **Workspace trust** | An untrusted workspace does not load its `.kiro/settings/mcp.json`, and Kiro asks before every MCP tool call there, even with `autoApprove` | Each Kiro client |
+| **Admin permission rules** | `mcp` capability `deny` / `ask` rules; patterns are `<server>/<tool>` | `managed-settings.json` ([`managed-settings/`](managed-settings/)) |
+| **Configuration files** | `~/.kiro/settings/mcp.json` (user) and `.kiro/settings/mcp.json` (workspace). The agent can never write either file (Kiro hardcoded deny); with a registry, users can only add overrides to listed servers | User profile; repository |
+
+All of these are enforced by the Kiro client. A user with local administrator rights can circumvent them, so pair them with the endpoint controls in Part 1, Section 4.1.2 (no local admin rights, application allow-listing).
+
+### 5.1 Centralized Whitelist Management (MCP Registry)
+
+**Set up:** in the Kiro console, open **Settings**, and under **Shared settings** turn **Model Context Protocol (MCP)** on. Next to **MCP Registry URL** choose **Edit**, enter the HTTPS URL of the registry file, and choose **Save**.
+
+**Registry file** (example with two local servers; [`managed-settings/mcp-registry.example.json`](managed-settings/mcp-registry.example.json) also shows environment variables, `registryBaseUrl` and a remote server entry). The versions are examples: pin the exact version that your third-party review approved.
+
+```json
+{
+  "servers": [
+    {
+      "server": {
+        "name": "aws-documentation",
+        "title": "AWS Documentation",
+        "description": "Search and read public AWS documentation",
+        "version": "1.2.3",
+        "packages": [
+          {
+            "registryType": "pypi",
+            "identifier": "awslabs.aws-documentation-mcp-server",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      }
+    },
+    {
+      "server": {
+        "name": "git",
+        "title": "Git (read-only use)",
+        "description": "Inspect local Git repositories",
+        "version": "1.0.0",
+        "packages": [
+          {
+            "registryType": "pypi",
+            "identifier": "mcp-server-git",
+            "transport": { "type": "stdio" }
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+**How the registry behaves:**
+- **Pin exact versions.** Kiro rejects version ranges such as `^1.2.3`, `~1.2.3`, `>=1.2.3`, `1.x` or `1.*`, and relaunches a locally installed server that runs a different version at the registry version. Kiro accepts non-semantic version strings, so it would not reject `latest`: never use it, and check for it in the publication pipeline (Section 5.2).
+- **Hosting.** The file must be served over HTTPS with a certificate from a trusted CA (self-signed certificates are rejected). The URL can be private to the corporate network.
+- **Refresh.** Kiro fetches the registry at startup and every 24 hours. A server removed from the registry is terminated.
+- **Unlisted servers are hidden**, including entries in a user's own `mcp.json`. A user can only add environment variables, headers, a timeout, the server scope and tool trust on top of a registry entry; the package, command and version come from the registry.
+- **Scope.** It applies to IAM Identity Center and API-key users in the Kiro IDE and CLI. It does not apply to AWS Builder ID or social sign-in users (block those sign-in methods; Part 1, Section 2.2) or to Kiro Web (keep Cloud Sessions off).
+- **Unreachable governance API.** If the client cannot reach the governance API, MCP is disabled ("Failed to retrieve MCP settings — MCP disabled"). Keep the Kiro endpoints on the egress allowlist (Part 1, Section 3.3).
+- **Runners.** Clients need `uvx` (PyPI), `npx` (npm) or `docker` (OCI) installed, and the package source must be reachable through the egress path or an internal mirror (`registryBaseUrl`).
+- **Network needs of the server itself.** The registry controls which server runs, not what it connects to. The AWS Documentation server, for example, runs locally but fetches pages from AWS documentation hosts on the internet, so it only works if those hosts are on the egress allowlist. The alternative is a remote endpoint such as the AWS Knowledge MCP Server (`https://knowledge-mcp.global.api.aws`, no authentication, rate-limited), which needs egress to that host instead. Record the hosts each approved server needs in its change record.
+- **Change control.** Treat every registry change as a change record: which server and version, who approved it, the third-party review, and how to roll back.
+
+**User configuration referencing the registry** (`~/.kiro/settings/mcp.json`; overrides only):
 
 ```json
 {
   "mcpServers": {
-    "aws-docs": {
-      "command": "uvx",
-      "args": ["awslabs.aws-documentation-mcp-server@latest"],
-      "disabled": false,
-      "autoApprove": ["mcp_aws_docs_search_documentation", "mcp_aws_docs_read_documentation"]
-    },
-    "git": {
-      "command": "uvx",
-      "args": ["mcp-server-git"],
-      "disabled": false,
-      "autoApprove": [],
-      "disabledTools": ["git_push", "git_force_push"]
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Projects"],
-      "disabled": false,
-      "autoApprove": [],
-      "disabledTools": ["delete_file"]
-    }
+    "aws-documentation": { "type": "registry", "timeout": 60000 },
+    "git": { "type": "registry" }
   }
 }
 ```
 
-**Deployment Script:**
-```powershell
-# Deploy via GPO startup script
-$centralConfig = "\\fileserver\kiro-config\mcp.json"
-$targetPath = "C:\ProgramData\Kiro\mcp.json"
+**Restrict tools of an approved server** with an admin rule in `managed-settings.json` (add it to the `rules` array of the single file you deploy). The tool names below are those of the reference `mcp-server-git` server and are examples: list the tools of the exact version you pinned and update the rule when the version changes.
 
-Copy-Item $centralConfig $targetPath -Force
-icacls $targetPath /inheritance:r /grant:r "SYSTEM:(F)" "Administrators:(F)" "Users:(R)"
-
-# Symlink user config to central
-$userConfig = "$env:USERPROFILE\.kiro\settings\mcp.json"
-New-Item -ItemType SymbolicLink -Path $userConfig -Target $targetPath -Force
+```json
+{
+  "capability": "mcp",
+  "match": ["git/git_commit", "git/git_add", "git/git_reset", "git/git_create_branch", "git/git_checkout"],
+  "effect": "deny"
+}
 ```
+
+**Filesystem MCP servers:** Kiro's built-in file tools already read and write files, and they are governed by the `fs_read` / `fs_write` rules (for example the admin deny on `**/.env`). File access by an MCP server is governed only by `mcp` rules, so a filesystem MCP server would bypass those file rules. Do not approve one unless there is a specific need and a security review.
 
 ### 5.2 MCP Configuration Validation
 
-**Validation Script:**
+Kiro itself rejects malformed registry entries and version ranges. Run an additional pre-publication check in the pipeline that publishes the registry, so that only servers with an approved change record reach the HTTPS location. The `jq` checks in [`managed-settings/README.md`](managed-settings/README.md#validation) cover the format; the sketch below also checks the approved list.
+
+**Validation Script (sketch):**
 ```python
 import json
-import hashlib
+import re
+import sys
 
-APPROVED_SERVERS = ["aws-docs", "git", "filesystem"]
-APPROVED_HASH = "sha256_of_approved_config"
+# Approved servers from the change records: registry name -> package identifier or remote URL
+APPROVED = {
+    "aws-documentation": "awslabs.aws-documentation-mcp-server",
+    "git": "mcp-server-git",
+}
+EXACT_VERSION = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+NAME = re.compile(r"^[a-zA-Z0-9._-]{3,200}$")
 
-def validate_mcp_config(config_path):
-    with open(config_path) as f:
-        config = json.load(f)
-    
-    # Check only approved servers
-    for server in config.get("mcpServers", {}).keys():
-        if server not in APPROVED_SERVERS:
-            raise ValueError(f"Unauthorized MCP server: {server}")
-    
-    # Verify config hash
-    config_hash = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
-    if config_hash != APPROVED_HASH:
-        raise ValueError("MCP configuration tampered")
-    
-    return True
+
+def validate_registry(path):
+    with open(path, encoding="utf-8") as f:
+        registry = json.load(f)
+
+    errors, seen = [], set()
+    for entry in registry.get("servers", []):
+        server = entry.get("server", {})
+        name = server.get("name", "")
+        version = server.get("version", "")
+        packages = server.get("packages", [])
+        remotes = server.get("remotes", [])
+
+        if not NAME.match(name):
+            errors.append(f"invalid name: {name!r}")
+        if name in seen:
+            errors.append(f"duplicate name: {name}")
+        seen.add(name)
+        if name not in APPROVED:
+            errors.append(f"{name}: no approved change record")
+        if not EXACT_VERSION.match(version):
+            errors.append(f"{name}: version must be exact, got {version!r}")
+        if len(packages) + len(remotes) != 1:
+            errors.append(f"{name}: needs exactly one package or one remote")
+        for package in packages:
+            if package.get("identifier") != APPROVED.get(name):
+                errors.append(f"{name}: package {package.get('identifier')!r} is not the approved one")
+        for remote in remotes:
+            if not remote.get("url", "").startswith("https://"):
+                errors.append(f"{name}: remote URL must use HTTPS")
+            elif remote.get("url") != APPROVED.get(name):
+                errors.append(f"{name}: remote URL is not the approved one")
+    return errors
+
+
+if __name__ == "__main__":
+    problems = validate_registry(sys.argv[1])
+    for problem in problems:
+        print(f"ERROR: {problem}")
+    sys.exit(1 if problems else 0)
 ```
 
 ### 5.3 MCP Usage Monitoring
 
-**CloudWatch Log Insights Query:**
+MCP tools run on the client: a local (stdio) server runs on the developer's machine, and the client calls a remote server directly. Kiro does not document a CloudTrail event for MCP tool calls, so CloudTrail cannot show MCP usage. Use these sources instead:
+
+- **Hook audit log:** a `PostToolUse` hook records each tool call on the device, including MCP tools (see [`agent-hooks/README.md`](agent-hooks/README.md)). Ship it to CloudWatch Logs with the CloudWatch agent. It is supplementary evidence: the file is user-writable unless the OS makes it append-only, and it is not tamper-proof.
+- **Remote MCP servers you host:** the server's own access logs are the authoritative record of calls to it.
+- **Client MCP logs:** Kiro panel → Output → "Kiro - MCP Logs" (troubleshooting, not audit).
+- **Prompt logs** (Section 9.3) show the conversation; Kiro does not document that they list every tool call.
+
+**CloudWatch Logs Insights query (sketch)** over the log group that receives the hook audit log. Adjust the `parse` expression to the record format of your audit hook:
 ```sql
-fields @timestamp, userIdentity.principalId, eventName, requestParameters.toolName
-| filter eventSource = "q.amazonaws.com" 
-| filter eventName = "InvokeMCPTool"
-| stats count() by requestParameters.toolName, userIdentity.principalId
+fields @timestamp, @message
+| parse @message /"tool":"(?<tool>[^"]+)"/
+| filter tool like /\//
+| stats count() as calls by tool
+| sort calls desc
 ```
 
 ---
@@ -95,14 +195,54 @@ fields @timestamp, userIdentity.principalId, eventName, requestParameters.toolNa
 
 ### 6.1 Secure Development Workflow
 
-**Kiro Supervised Mode (Mandatory for Production):**
+**Agent autonomy and permissions (Kiro IDE 1.0+ and the Kiro CLI V3 engine):**
+
+Kiro decides each agent action in two steps. In the IDE, the autonomy setting decides whether Kiro proceeds or prompts; the permission rules then allow, prompt for, or deny the tool call. The admin rules are the enforced part; autonomy and user rules are convenience settings.
+
+| Control | Setting | Set by |
+|---------|---------|--------|
+| IDE autonomy | `kiroAgent.agentAutonomy`: `Autopilot` (proceed with allowed operations; **the default unless changed**) or `Supervised` (prompt before any action) | User; pre-set `Supervised` in the default user settings of the VDI image |
+| Admin permission rules | `deny` / `ask` rules in `managed-settings.json` (admin rules cannot use `allow`) | Administrator, deployed by MDM or GPO ([`managed-settings/README.md`](managed-settings/README.md)) |
+| User permission rules | `allow` / `ask` / `deny` rules in `~/.kiro/settings/permissions.yaml` | User (template: [`managed-settings/permissions.banking.yaml`](managed-settings/permissions.banking.yaml)) |
+| Workspace trust | Leave unknown repositories untrusted | User |
+
+**IDE user setting:**
 ```json
 {
-  "kiro.autopilot.enabled": false,
-  "kiro.supervised.requireApproval": true,
-  "kiro.trustedCommands": ["npm install", "npm test", "git status"]
+  "kiroAgent.agentAutonomy": "Supervised"
 }
 ```
+
+**Admin rules** (abridged from [`managed-settings/managed-settings.banking.json`](managed-settings/managed-settings.banking.json), which also carries the sign-in restriction):
+```json
+{
+  "rules": [
+    { "capability": "shell", "match": ["git push *--force*", "git push -f*", "git reset *--hard*", "sudo *", "curl *", "wget *"], "effect": "deny" },
+    { "capability": "shell", "match": ["git push*", "npm publish*", "cdk deploy*", "terraform apply*"], "effect": "ask" },
+    { "capability": "fs_read", "match": ["**/.env", "**/.env.*", "**/*.pem", "~/.aws/credentials", "~/.ssh/**"], "effect": "deny" }
+  ]
+}
+```
+
+**User rules** (abridged from the user template):
+```yaml
+# ~/.kiro/settings/permissions.yaml
+rules:
+  - capability: shell
+    effect: allow
+    match: ["npm test*", "npm run lint*", "npx cdk synth*"]
+  - capability: fs_write
+    effect: allow
+    match: ["src/**", "test/**", "tests/**", "docs/**"]
+```
+
+**How the rules combine:**
+- **Deny wins.** `deny > ask > allow` across all scopes, with no precedence between scopes. A user, workspace, agent or session `allow` (including `kiro-cli --trust-all-tools` and `/tools trust-all`) cannot remove an admin `deny` or `ask`.
+- **Headless runs** (no interactive client) treat every `ask` as `deny`, so a pipeline that runs Kiro cannot push, publish or deploy under this policy.
+- **Do not auto-allow `npm install`, `npm ci`, `pip install`, `terraform init` or `terraform plan`.** They run third-party code (package lifecycle scripts, Terraform providers and `external` data sources). Leave them at the default prompt.
+- **Replaced settings.** Kiro IDE 1.0 replaced Trusted Commands and the Command Denylist with these rules: trusted command prefixes become `allow` rules and denylist entries become `deny` rules (`kiroAgent.trustedCommands` and `kiroAgent.commandDenylist` are no longer used). In the CLI, convert legacy agent `toolsSettings` with `kiro-cli agent migrate` (or `/upgrade-agent`); `autoAllowReadonly` and `denyByDefault` have no equivalent and must be written as explicit rules.
+- **Hardcoded invariants.** Kiro always denies agent writes to `~/.kiro/settings/` and `.kiro/settings/` (so the agent cannot edit its own permission or MCP files), and always asks before writes to `.git/**` and to the agents, hooks, workflows and powers directories under `.kiro` and `~/.kiro`.
+- **Limits.** Shell globs match the command text and can be evaded (for example by quoting or indirection), and all of these rules are enforced by the client, so a local administrator can remove them. Hooks ([`agent-hooks/README.md`](agent-hooks/README.md)), the VDI controls in Part 1, Section 4 and server-side branch protection (Section 13.2) are the further layers. See [`managed-settings/README.md`](managed-settings/README.md#glob-limitations).
 
 ### 6.2 Secrets Management
 
@@ -113,11 +253,16 @@ aws secretsmanager create-secret \
   --name /banking/dev/db-password \
   --secret-string "$(openssl rand -base64 32)" \
   --kms-key-id arn:aws:kms:region:account:key/xxxxx
+```
 
+```python
 # Retrieve in code (never hardcode)
 import boto3
-secret = boto3.client('secretsmanager').get_secret_value(SecretId='/banking/dev/db-password')
+
+secret = boto3.client("secretsmanager").get_secret_value(SecretId="/banking/dev/db-password")
 ```
+
+The admin policy in [`managed-settings/`](managed-settings/) denies `aws secretsmanager get-secret-value*` in the agent's shell tool; application code reads secrets at run time with its own IAM role. Because glob rules can be evaded, also keep the developer's own AWS credentials least-privilege.
 
 **Kiro Prompt Guidance:**
 ```
@@ -168,24 +313,52 @@ fi
 
 ### 7.1 Customer-Managed KMS Keys
 
-**Create KMS Key for Kiro:**
+**1. Create the KMS key** (symmetric; create it in the Kiro profile region, Section 7.2):
 ```bash
 aws kms create-key \
+  --region us-east-1 \
+  --key-spec SYMMETRIC_DEFAULT \
+  --key-usage ENCRYPT_DECRYPT \
   --description "Kiro data encryption" \
   --key-policy '{
     "Version": "2012-10-17",
     "Statement": [{
       "Sid": "Enable IAM policies",
       "Effect": "Allow",
-      "Principal": {"AWS": "arn:aws:iam::account:root"},
+      "Principal": {"AWS": "arn:aws:iam::<account-id>:root"},
       "Action": "kms:*",
       "Resource": "*"
     }]
   }'
 
-# Configure in Kiro console
-aws q update-encryption-configuration \
-  --kms-key-id arn:aws:kms:region:account:key/xxxxx
+aws kms enable-key-rotation --region us-east-1 --key-id <key-id>
+```
+
+**2. Select the key in the Kiro console:** open **Settings** > **Encryption key** and choose the customer managed key. There is no CLI command for this step.
+
+**Caveats:**
+- Only symmetric keys are supported.
+- Customer managed keys are not supported for Kiro Web (Cloud Sessions), which is another reason to keep Cloud Sessions off.
+- Kiro docs do not say which data and features the key covers, or whether the key must be in the profile region. Verify both with AWS before you rely on the key in your risk assessment, and record the answer.
+
+**Least-privilege notes for the key policy:**
+- The `Enable IAM policies` statement lets IAM policies in the account grant access to the key. It grants nothing by itself, but any IAM principal with a broad `kms:*` policy could then use or delete the key, so do not grant `kms:*` in IAM.
+- Add separate statements for key administrators (key management without `kms:Encrypt` / `kms:Decrypt`) and for the role that configures Kiro (the KMS permissions in Kiro's example IAM policy). Kiro does not document a service principal or `kms:ViaService` value for the key policy; do not guess one.
+- Allow `kms:DisableKey` and `kms:ScheduleKeyDeletion` only to a break-glass role: disabling or deleting the key makes the data encrypted with it unavailable.
+- Alert on key policy changes and on key use (`kms.amazonaws.com` events in CloudTrail).
+
+Example key-administrator statement (no use of the key, no deletion):
+```json
+{
+  "Sid": "KeyAdministrators",
+  "Effect": "Allow",
+  "Principal": {"AWS": "arn:aws:iam::<account-id>:role/KmsKeyAdmin"},
+  "Action": [
+    "kms:Describe*", "kms:List*", "kms:Get*", "kms:Create*", "kms:Enable*",
+    "kms:Put*", "kms:Update*", "kms:Revoke*", "kms:TagResource", "kms:UntagResource"
+  ],
+  "Resource": "*"
+}
 ```
 
 ### 7.2 Data Location & Residency
@@ -198,13 +371,13 @@ MAS TRM Guidelines focus on **data protection controls** (encryption, access con
 
 **Two regions to keep apart:**
 - **Workload region (`ap-southeast-1`):** the institution's own infrastructure — VPC, WorkSpaces VDI, CloudTrail, AWS Config and AWS Backup (the CDK stacks in this repo). IAM Identity Center can also be in `ap-southeast-1`, so identities and subscriptions can stay in Singapore.
-- **Kiro profile region (`us-east-1` or `eu-central-1`):** where Kiro stores and processes prompts, code context and responses, and where the prompt-log bucket, the user activity report bucket and the Kiro customer-managed KMS key (Section 7.1) must be created.
+- **Kiro profile region (`us-east-1` or `eu-central-1`):** where Kiro stores and processes prompts, code context and responses, and where the prompt-log bucket and the user activity report bucket must be created. Create the Kiro customer-managed KMS key here as well (Section 7.1; the region constraint for the key is not documented, so verify it).
 
 **Regional Reality for Kiro:**
 - **Profile / Service Region:** Kiro profiles are hosted in `us-east-1` or `eu-central-1` (or AWS GovCloud (US)). Content (including customizations) is stored in the profile region. There is no `ap-southeast-1` profile. The Identity Center region can differ from the profile region.
 - **Logging:** Prompt log and user activity report S3 buckets **must** reside in the AWS Region where the Kiro profile was installed. Cross-account buckets are not supported. From Kiro IDE 1.2, telemetry and activity data are also sent to the profile region.
 - **Inference:** Kiro is powered by Amazon Bedrock and uses cross-region inference. For Geography-scope models (including all Claude models), requests stay within the AWS Regions of the profile's geography: a US profile uses US Regions (`us-east-1`, `us-west-2`, `us-east-2`) and a Europe profile uses Europe Regions (`eu-central-1`, `eu-west-1`, `eu-west-3`, `eu-north-1`, `eu-south-1`, `eu-south-2`). There is no Asia Pacific geography, so these requests do **not** route to Singapore. Global-scope models are the exception (next bullet).
-- **Inference scope:** inference scope is set per model (Inference endpoint regions table on the [Kiro models page](https://kiro.dev/docs/models/)). Geography-scope models, which include all Claude models, use the US endpoint for `us-east-1` profiles and the EU endpoint for `eu-central-1` profiles and stay within that geography. Global-scope models (currently GPT-5.6 Sol, Terra and Luna) may be processed in supported commercial AWS Regions worldwide, including outside the endpoint geography, and use the US endpoint even for `eu-central-1` profiles. Cross-region inference does not change where Kiro stores data, and lifecycle status and inference scope are independent: experimental or preview status does not determine routing. Kiro has no setting to disable cross-region inference. The control is model governance: manage the approved model list (Kiro console > Settings > Shared settings > Model availability) so that Global-scope models are not available until an administrator approves them, and review preview terms such as Claude Fable 5.1's 30-day retention.
+- **Inference scope (Kiro models page, updated 2026-10-08):** inference scope is set per model in the Inference endpoint regions table of the [Kiro models page](https://kiro.dev/docs/models/). Geography-scope models, which include all Claude models, use the US endpoint for `us-east-1` profiles and the EU endpoint for `eu-central-1` profiles and stay within that geography. Global-scope models (currently GPT-5.6 Sol, Terra and Luna) may be processed in supported commercial AWS Regions worldwide, including outside the endpoint geography, and use the US endpoint even for `eu-central-1` profiles. Cross-region inference does not change where Kiro stores data, and lifecycle status and inference scope are independent: Claude Opus 5.5 and Sonnet 5.5 launched with "experimental support" and have Geography scope. Kiro has no setting to disable cross-region inference. The control is model governance: manage the approved model list (Kiro console > Settings > Shared settings > Model availability) so that Global-scope models, and preview or experimental models, are not available until an administrator approves them (review preview terms such as Claude Fable 5.1's 30-day retention). See the model approval matrix in [`kiro-docs/security-governance-features.md`](kiro-docs/security-governance-features.md).
 - **Cloud Sessions (Kiro Web):** run in `us-east-1` only, and customer-managed KMS keys, MCP configuration and model availability settings do not apply to them. They are off by default for IAM Identity Center organisations; keep them off unless they have been assessed.
 - **Mitigation (if residency is preferred):** Use S3 Cross-Region Replication (CRR) to replicate the profile-region log bucket to `ap-southeast-1` for local access. This produces a regional **copy**; the authoritative log location remains the profile region.
 - **VPC / network:** There are no Kiro VPC endpoints in `ap-southeast-1`. Kiro interface endpoints (`com.amazonaws.us-east-1.q`, `com.amazonaws.us-east-1.codewhisperer`, `com.amazonaws.eu-central-1.q`) exist only in the profile region, and sign-in and downloads use public HTTPS endpoints that must be allowlisted. See Part 1, Section 3 for the connectivity options. The network path does not change where Kiro processes or stores data.
@@ -224,22 +397,13 @@ MAS TRM Guidelines focus on **data protection controls** (encryption, access con
 
 ### 7.3 Opt-Out Configuration
 
-**Disable Service Improvement (Enterprise):**
-```bash
-# Via IAM IDC - applies to all users
-aws q update-organization-settings \
-  --opt-out-service-improvement true \
-  --opt-out-telemetry false
-```
+No command or setting is needed for Kiro enterprise users (IAM Identity Center or external IdP subscriptions):
 
-**IDE Settings (Backup):**
-```json
-{
-  "kiro.telemetry.enabled": false,
-  "kiro.shareContentWithAWS": false,
-  "kiro.codeReferences.enabled": true
-}
-```
+- **Service improvement:** enterprise content is not used for service improvement, and enterprise users are automatically opted out of telemetry and content collection by AWS. The administrator controls the telemetry used for user activity reports; enterprise users cannot change it.
+- **Telemetry location:** from Kiro IDE 1.2, telemetry and activity data are sent to an endpoint in the profile region. If the profile region has no endpoint, the IDE drops the telemetry rather than sending it to another region.
+- **Exception: model-specific retention.** Some models retain traffic for abuse detection. Claude Fable 5.1 (Preview) retains all traffic for up to 30 days, and traffic flagged by classifiers may be reviewed by humans at AWS. For GPT models, only classifier-flagged traffic is retained for 30 days. Keep such models off the approved model list unless you have assessed them (see the model approval matrix in [`kiro-docs/security-governance-features.md`](kiro-docs/security-governance-features.md)).
+- **Client opt-out settings:** the IDE and CLI telemetry and content settings matter for Free Tier and individual subscribers; in a managed VDI image they are an optional second layer. See [`kiro-docs/privacy-and-security.md`](kiro-docs/privacy-and-security.md) (Opt Out of Data Sharing).
+- **Code references:** keep the reference tracker on, so that suggestions that resemble open-source code are logged with their license (this supports the review of third-party and open-source code, TRM 6.1.3), or opt out of suggestions with references for all users in the Kiro console. See [`kiro-docs/privacy-and-security.md`](kiro-docs/privacy-and-security.md) (Code References).
 
 ---
 
@@ -253,7 +417,7 @@ aws q update-organization-settings \
 | Encryption | 10.1 (TLS), 10.2 (key management) | TLS 1.2+ + KMS customer-managed keys with rotation | KMS key policy |
 | Data Security | 11.1 | DLP + Encryption | DLP reports |
 | Network Security | 11.2 | Private VPC + egress allowlist (PrivateLink to Kiro only in the profile region) | VPC flow logs |
-| Audit Logging & Monitoring | 12.2 | CloudTrail + CloudWatch | S3 audit bucket |
+| Audit Logging & Monitoring | 12.2 | Kiro prompt logging + user activity reports + CloudTrail + CloudWatch | S3 log buckets (profile region and workload region) |
 
 TRM 15.1 (IT Audit) covers the independent audit function, which uses these logs as evidence; it is not the logging control itself. The matrix shows where controls support each TRM section. Each institution remains responsible for its own compliance assessment.
 
@@ -261,17 +425,25 @@ TRM 15.1 (IT Audit) covers the independent audit function, which uses these logs
 
 ### 8.2 Audit Trail Requirements
 
+**Audit sources for Kiro:**
+
+| Source | What it records | Where | Notes |
+|--------|-----------------|-------|-------|
+| **Kiro prompt logging** (Section 9.3) | Prompts and responses in the IDE and CLI (chat and inline suggestions), with user ID, timestamps and conversation IDs | S3 bucket in the profile region | Primary record of AI-assisted activity |
+| **User activity reports** | Daily per-user CSV, one per client type (generated at 02:00 UTC) | S3 in the profile region (`.../AWSLogs/<account>/KiroLogs/user_report/<region>/yyyy/mm/dd/00/`) | Same region and account as the profile; a prefix is required |
+| **CloudTrail** | AWS API calls in the account: IAM Identity Center, KMS, S3, IAM and console changes | Trail bucket (workload account) | Kiro docs say only that CloudTrail "captures API calls"; Kiro event sources are not documented |
+| **OpenTelemetry usage export** | Daily `kiro.daily.*` usage metrics | Your OTLP collector | Usage metrics only, not an audit trail |
+| **Local hook audit log** | Each tool call on the device, including MCP tools (Section 5.3) | Device, shipped to the SIEM | Supplementary: user-writable unless the OS makes it append-only; not tamper-proof |
+
 **CloudTrail Configuration:**
 ```bash
+# Management events. Kiro does not document CloudTrail data events, so do not
+# configure data resources for Kiro.
 aws cloudtrail put-event-selectors \
   --trail-name kiro-audit \
   --event-selectors '[{
     "ReadWriteType": "All",
-    "IncludeManagementEvents": true,
-    "DataResources": [{
-      "Type": "AWS::Q::Chat",
-      "Values": ["arn:aws:q:*:*:*"]
-    }]
+    "IncludeManagementEvents": true
   }]'
 
 # Enable log file validation
@@ -279,6 +451,10 @@ aws cloudtrail update-trail \
   --name kiro-audit \
   --enable-log-file-validation
 ```
+
+- The trail must also cover the Kiro profile region (a multi-region or organization trail; the Monitoring stack in [`cdk/`](cdk/) creates a multi-region trail).
+- **Verify the event sources in your own account** before you build detections: open CloudTrail Event history in the profile region after some Kiro use and look for events from `codewhisperer.amazonaws.com` or `q.amazonaws.com` (candidates; not documented for Kiro).
+- MCP tools run on the client, so MCP tool calls do not create CloudTrail events (Section 5.3).
 
 **S3 Lifecycle Policy (example institutional policy, not prescribed by MAS TRM: move to Glacier after 90 days, expire after ~7 years; set the expiry per your record-keeping obligations, commonly 5–7 years):**
 ```json
@@ -300,33 +476,55 @@ aws cloudtrail update-trail \
 
 ### 8.3 Compliance Reporting
 
-**Monthly Compliance Report Script:**
-```python
-import boto3
-from datetime import datetime, timedelta
+**Monthly Compliance Report Script (sketch):** summarizes Kiro-related CloudTrail management events. Verify the event source names in your account first (Section 8.2). `LookupEvents` returns management events of the last 90 days in one region only, so query the Kiro profile region; for longer periods or larger volumes, query the trail bucket with Athena or use CloudTrail Lake. Per-user Kiro usage comes from the user activity reports, and sign-in failures from IAM Identity Center (in its own region) or your IdP, not from this query.
 
-def generate_compliance_report():
-    cloudtrail = boto3.client('cloudtrail')
-    
-    # Last 30 days
-    end_time = datetime.now()
-    start_time = end_time - timedelta(days=30)
-    
-    events = cloudtrail.lookup_events(
-        LookupAttributes=[{'AttributeKey': 'EventSource', 'AttributeValue': 'q.amazonaws.com'}],
-        StartTime=start_time,
-        EndTime=end_time
-    )
-    
-    report = {
+```python
+"""Sketch: monthly summary of Kiro-related CloudTrail management events."""
+import json
+from collections import Counter
+from datetime import datetime, timedelta, timezone
+
+import boto3
+
+PROFILE_REGION = "us-east-1"                      # Kiro profile region
+EVENT_SOURCES = ["codewhisperer.amazonaws.com"]   # candidate; verify in your account
+
+
+def generate_compliance_report(days=30):
+    cloudtrail = boto3.client("cloudtrail", region_name=PROFILE_REGION)
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(days=days)
+    paginator = cloudtrail.get_paginator("lookup_events")
+
+    total = 0
+    principals = set()
+    event_names = Counter()
+    error_codes = Counter()
+    for source in EVENT_SOURCES:
+        pages = paginator.paginate(
+            LookupAttributes=[{"AttributeKey": "EventSource", "AttributeValue": source}],
+            StartTime=start_time,
+            EndTime=end_time,
+        )
+        for page in pages:
+            for event in page.get("Events", []):
+                total += 1
+                principals.add(event.get("Username", "unknown"))
+                event_names[event.get("EventName", "unknown")] += 1
+                # Error details are inside the CloudTrailEvent JSON, not at the top level
+                detail = json.loads(event.get("CloudTrailEvent") or "{}")
+                if detail.get("errorCode"):
+                    error_codes[detail["errorCode"]] += 1
+
+    return {
         "period": f"{start_time.date()} to {end_time.date()}",
-        "total_events": len(events['Events']),
-        "unique_users": len(set(e['Username'] for e in events['Events'])),
-        "mcp_tool_usage": sum(1 for e in events['Events'] if 'MCP' in e['EventName']),
-        "failed_auth": sum(1 for e in events['Events'] if e.get('ErrorCode'))
+        "region": PROFILE_REGION,
+        "event_sources": EVENT_SOURCES,
+        "total_events": total,
+        "unique_principals": len(principals),
+        "top_event_names": event_names.most_common(10),
+        "errors_by_code": dict(error_codes),
     }
-    
-    return report
 ```
 
 ---
@@ -343,60 +541,65 @@ def generate_compliance_report():
 5. ✅ Kiro access tested
 
 **Training Topics:**
-- Supervised mode vs Autopilot
-- MCP server restrictions
+- Agent autonomy (Supervised vs Autopilot), permission prompts and why admin rules cannot be overridden
+- Workspace trust: when to trust a repository and when to leave it untrusted
+- MCP registry and approved MCP servers
 - Secrets management
 - Code review requirements
 - DLP policies
 
 ### 9.2 Kiro Usage Guidelines
 
-**Supervised Mode (Default):**
-```json
-{
-  "kiro.mode": "supervised",
-  "kiro.autoApprove": false,
-  "kiro.reviewRequired": ["file_write", "command_execute", "mcp_tool"]
-}
-```
+Set the posture per repository; the mechanisms are described in Section 6.1.
 
-**Trusted Commands (Minimal):**
-```json
-{
-  "kiro.trustedCommands": [
-    "npm install",
-    "npm test",
-    "git status",
-    "git log",
-    "terraform plan"
-  ]
-}
-```
+| Repository | Autonomy (`kiroAgent.agentAutonomy`) | Permissions |
+|------------|--------------------------------------|-------------|
+| Sandbox or prototype with synthetic data | `Autopilot` acceptable | Admin baseline + user template |
+| Code that reaches production pipelines | `Supervised` | Admin baseline; no user `allow` rules for shell commands beyond test, lint and build |
+| Third-party code, forks, downloaded samples | Leave the workspace untrusted | Admin baseline; Kiro asks before every shell command and MCP tool call |
+
+**Minimal allow list (user scope):** keep `allow` rules to local, read-only or test commands, for example `git status`, `git diff`, `git log` (already allowed by default), `npm test`, linters and `cdk synth`. Do not add `npm install` or `terraform plan`: they execute third-party code. Never add `capability: all`, or a `shell` or `fs_read` rule without a `match` list. The template is [`managed-settings/permissions.banking.yaml`](managed-settings/permissions.banking.yaml).
 
 ### 9.3 Prompt Logging
 
-**Enable Prompt Logging:**
-```bash
-aws q put-prompt-logging-configuration \
-  --s3-bucket-name kiro-prompts-<account-id> \
-  --kms-key-id arn:aws:kms:region:account:key/xxxxx
-```
+**Enable prompt logging (Kiro console):** open **Settings** > **Kiro Settings** > **Logging**, turn on **Log Kiro prompts with metadata**, and enter the S3 location, for example `s3://kiro-prompts-<account-id>-<profile-region>/kiro-prompt-logs/`. There is no CLI command for this step.
+
+- **Bucket location:** the bucket must be in the Kiro profile region (where the profile was installed when users were first subscribed; Section 7.2) and in the account where users are subscribed. Cross-account buckets are not supported.
+- **Content:** user prompts and Kiro responses from the IDE and the CLI. Inline suggestions are logged with their context, file name, accepted completions, user ID and timestamp; chat with the prompt, response, conversation ID, code references, web links, user ID and timestamp.
+- **User activity reports:** turn them on as well (daily CSV per client type to the same region and account; a prefix is required). See [Kiro Docs: Viewing per-user activity](https://kiro.dev/docs/cli/enterprise/monitor-and-track/user-activity/).
 
 **S3 Bucket Policy:**
 ```json
 {
   "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {"Service": "q.amazonaws.com"},
-    "Action": "s3:PutObject",
-    "Resource": "arn:aws:s3:::kiro-prompts-*/*",
-    "Condition": {
-      "StringEquals": {"s3:x-amz-server-side-encryption": "aws:kms"}
+  "Statement": [
+    {
+      "Sid": "KiroLogsWrite",
+      "Effect": "Allow",
+      "Principal": {"Service": "q.amazonaws.com"},
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::<bucket>/<prefix>/*",
+      "Condition": {
+        "StringEquals": {"aws:SourceAccount": "<account-id>"},
+        "ArnLike": {"aws:SourceArn": "arn:aws:codewhisperer:<profile-region>:<account-id>:*"}
+      }
+    },
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::<bucket>", "arn:aws:s3:::<bucket>/*"],
+      "Condition": {"Bool": {"aws:SecureTransport": "false"}}
     }
-  }]
+  ]
 }
 ```
+
+- The service principal is `q.amazonaws.com` and the source ARN uses the `codewhisperer` service prefix, as in the Kiro docs.
+- Use default bucket encryption instead of a policy condition that requires an encryption header: the documented policy has no such condition, and a condition that the log delivery does not meet blocks delivery. Kiro docs mention optional KMS encryption of the bucket but do not document the key permissions that delivery needs; if you use SSE-KMS with a customer managed key, test delivery after you enable it.
+- Turn on S3 Block Public Access and Versioning, and S3 Object Lock if your record-keeping policy requires immutable logs. Replicate to `ap-southeast-1` with Cross-Region Replication if you want a regional copy (Section 7.2).
+- Source: [Kiro Docs: Prompt logging](https://kiro.dev/docs/enterprise/monitor-and-track/prompt-logging/) (verified 2026-10-08).
 
 ### 9.4 Performance Optimization
 
@@ -405,20 +608,27 @@ aws q put-prompt-logging-configuration \
 - Use `.kiro/steering` for project-specific guidance
 - Avoid uploading large binary files
 
-**Steering File Example:**
-```yaml
-# .kiro/steering/banking-standards.yaml
-guidelines:
-  - "Follow MAS security guidelines"
-  - "Use AWS Secrets Manager for credentials"
-  - "All database queries must use parameterized statements"
-  - "Log all financial transactions"
-  
-prohibited:
-  - "Never hardcode credentials"
-  - "No direct database connections from frontend"
-  - "No unencrypted data transmission"
+**Steering File Example:** steering files are Markdown files in `.kiro/steering/` (workspace) or `~/.kiro/steering/` (global). Optional frontmatter must be at the very top of the file; `inclusion: always` is the default. The real file is [`.kiro/steering/banking-standards.md`](.kiro/steering/banking-standards.md), which uses the default and so has no frontmatter.
+
+```markdown
+---
+inclusion: always
+---
+# Banking Development Standards
+
+## Security Requirements
+- Follow the MAS Technology Risk Management Guidelines
+- Use AWS Secrets Manager for credentials
+- All database queries must use parameterized statements
+- Log all financial transactions
+
+## Prohibited Patterns
+- Never hardcode credentials
+- No direct database connections from frontend code
+- No unencrypted data transmission
 ```
+
+Steering is guidance for the agent, not an enforced control.
 
 ---
 
@@ -440,26 +650,35 @@ These response times are example internal SLAs (institutional policy). Regulator
 ### 10.2 MCP Server Compromise Response
 
 **Immediate Actions:**
-1. Disable affected MCP server in central config
-2. Revoke API tokens/credentials
-3. Review CloudTrail logs for unauthorized activity
-4. Isolate affected WorkSpaces
+1. Remove the server from the MCP registry. Clients terminate removed servers when they next fetch the registry (at startup and every 24 hours), so also ask users to restart Kiro. If you need more, turn MCP off in the Kiro console (Settings > Shared settings), or push an admin `mcp` deny rule for the server (`"match": ["<server>/*"]`) through MDM; managed-settings changes apply when Kiro restarts.
+2. Revoke the API tokens and credentials the server used.
+3. Review the hook audit log (Section 5.3), the prompt logs of the affected users, the server's own logs (for remote servers) and CloudTrail activity of any AWS credentials the server held.
+4. Isolate affected WorkSpaces.
 
 **Investigation Script:**
 ```bash
-# Find all MCP tool invocations in last 24 hours
+# MCP tool calls do not appear in CloudTrail (they run on the client). Search the
+# hook audit log in the SIEM (Section 5.3) and the prompt logs for the time window.
+
+# AWS API calls made with credentials the MCP server could use (last 24 hours).
+# GNU date shown; on macOS use: date -u -v-24H +%Y-%m-%dT%H:%M:%SZ
 aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventName,AttributeValue=InvokeMCPTool \
-  --start-time $(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%S) \
-  --query 'Events[*].[EventTime,Username,CloudTrailEvent]' \
-  --output json > mcp-investigation.json
+  --region <region> \
+  --lookup-attributes AttributeKey=AccessKeyId,AttributeValue=<access-key-id> \
+  --start-time "$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  --query 'Events[*].[EventTime,EventSource,EventName,Username]' \
+  --output json > mcp-investigation-cloudtrail.json
 ```
 
 ### 10.3 Data Breach Protocol
 
 **Containment:**
-```powershell
-# Immediately disable user access
+1. **Kiro access:** remove the user's Kiro subscription in the Kiro console (or remove the user from the group that holds the subscription), disable the user in the IdP (SCIM propagates the change), and revoke the user's active sessions in IAM Identity Center. Option B: disable the user in the external IdP.
+2. **AWS account access:** remove the user's permission-set assignments. This does not affect the Kiro subscription.
+3. **Secrets:** rotate the secrets the user or the affected workload could reach.
+
+```bash
+# Remove AWS account access (permission set assignment) for the user
 aws sso-admin delete-account-assignment \
   --instance-arn <instance-arn> \
   --target-id <account-id> \
@@ -468,8 +687,15 @@ aws sso-admin delete-account-assignment \
   --principal-type USER \
   --principal-id <user-id>
 
-# Rotate all secrets
-aws secretsmanager rotate-secret --secret-id /banking/*
+# Rotate every secret whose name starts with /banking/. rotate-secret takes one
+# secret ID per call and does not accept wildcards. Secrets without rotation
+# configured must be changed at the source and updated with put-secret-value.
+aws secretsmanager list-secrets \
+  --filters Key=name,Values=/banking/ \
+  --query 'SecretList[].ARN' --output text | tr '\t' '\n' |
+while read -r arn; do
+  aws secretsmanager rotate-secret --secret-id "$arn"
+done
 ```
 
 **Notification:**
@@ -510,16 +736,20 @@ Consider whether Kiro is part of a critical system. Usually it is not, but the C
 # List users
 aws identitystore list-users --identity-store-id d-xxxxx
 
-# Assign Kiro subscription
+# Grant AWS account access (permission set assignment).
+# This does NOT assign a Kiro subscription.
 aws sso-admin create-account-assignment \
-  --instance-arn <arn> --target-id <account> \
+  --instance-arn <arn> --target-id <account> --target-type AWS_ACCOUNT \
   --permission-set-arn <arn> --principal-type USER --principal-id <id>
 ```
 
+Kiro subscriptions are assigned to IAM Identity Center users or groups in the Kiro console, not with `create-account-assignment`. Account assignments only grant access to AWS accounts (for example for WorkSpaces administration).
+
 ### VPC Endpoints
 ```bash
-# Create Kiro endpoint
+# Create a Kiro endpoint in a VPC in the Kiro profile region (Part 1, Section 3.4)
 aws ec2 create-vpc-endpoint \
+  --region us-east-1 \
   --vpc-id vpc-xxxxx \
   --service-name com.amazonaws.us-east-1.q \
   --vpc-endpoint-type Interface \
@@ -529,11 +759,32 @@ aws ec2 create-vpc-endpoint \
 
 ### CloudTrail
 ```bash
-# Query Kiro events
+# Query Kiro-related events in the profile region. Kiro does not document its
+# event sources: verify them in Event history first (candidates:
+# codewhisperer.amazonaws.com, q.amazonaws.com).
 aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventSource,AttributeValue=q.amazonaws.com \
+  --region us-east-1 \
+  --lookup-attributes AttributeKey=EventSource,AttributeValue=codewhisperer.amazonaws.com \
   --max-results 50
 ```
+
+### Kiro Managed Settings
+```bash
+# Official paths (restart Kiro after a change)
+#   macOS:   /Library/Application Support/Kiro/managed-settings.json
+#   Linux:   /etc/kiro/managed-settings.json
+#   Windows: C:\ProgramData\Kiro\managed-settings.json (UTF-8 without BOM)
+
+# Validate before rollout: valid JSON, and admin rules use only deny or ask
+jq -e '[.rules[].effect] | all(. == "deny" or . == "ask")' managed-settings.json
+```
+
+```powershell
+# Windows: the first byte must be 123 ('{'); 239 means a UTF-8 BOM, 255 or 254 means UTF-16
+[System.IO.File]::ReadAllBytes('C:\ProgramData\Kiro\managed-settings.json')[0]
+```
+
+More checks: [`managed-settings/README.md`](managed-settings/README.md#validation).
 
 ### WorkSpaces
 ```bash
@@ -552,14 +803,19 @@ aws workspaces reboot-workspaces --reboot-workspace-requests WorkspaceId=ws-xxxx
 
 - [ ] IAM IDC integrated with Enterprise IdP
 - [ ] MFA enabled for all users
-- [ ] Social logins blocked at firewall
+- [ ] Sign-in restricted with `managed-settings.json` (Part 1, Section 2.2.1); social sign-in host denied on the egress allowlist
+- [ ] `managed-settings.json` deployed to the official path on every device, read-only for users, validated (no BOM, no `allow` rules)
+- [ ] Minimum client versions enforced (Kiro IDE 1.2+, Kiro CLI 2.25.0+ with V3 sessions)
 - [ ] VPC endpoints created and tested
 - [ ] WorkSpaces deployed with encryption
 - [ ] DLP agents installed and configured
-- [ ] Centralized MCP config deployed
-- [ ] CloudTrail logging enabled
+- [ ] MCP governance on, MCP Registry URL set, registry entries pinned to exact versions
+- [ ] Model allow list managed; experimental and preview models excluded unless assessed
+- [ ] Web tools, API key generation and Cloud Sessions off (or assessed and documented)
+- [ ] CloudTrail logging enabled (covering the Kiro profile region)
 - [ ] KMS customer-managed keys configured
-- [ ] Prompt logging enabled
+- [ ] Prompt logging and user activity reports enabled, delivered to the SIEM
+- [ ] Hooks installed (`agent-hooks/README.md`) as defense in depth
 - [ ] Security training completed
 - [ ] Incident response plan documented
 - [ ] Compliance report template created
@@ -567,7 +823,9 @@ aws workspaces reboot-workspaces --reboot-workspace-requests WorkspaceId=ws-xxxx
 ### Monthly Audit Checklist
 
 - [ ] Review CloudTrail logs for anomalies
-- [ ] Validate MCP configuration integrity
+- [ ] Review MCP registry changes against change records; check that clients are not reporting "MCP disabled"
+- [ ] Review new Kiro model launches and the approved model list (new models stay unavailable until added)
+- [ ] Check MDM compliance reports for devices with a missing or changed `managed-settings.json`
 - [ ] Check DLP policy violations
 - [ ] Review failed authentication attempts
 - [ ] Verify encryption key rotation
@@ -590,10 +848,19 @@ aws workspaces reboot-workspaces --reboot-workspace-requests WorkspaceId=ws-xxxx
 ### Issue: MCP server not loading
 
 **Check:**
-1. Config file permissions: `icacls C:\ProgramData\Kiro\mcp.json`
-2. MCP server in approved list
-3. MCP logs: Kiro panel → Output → "Kiro - MCP Logs"
-4. Network connectivity to MCP server endpoint
+1. MCP governance: MCP is on and the client can reach the governance API. The `/mcp` panel shows "Failed to retrieve MCP settings — MCP disabled" when it cannot; check the egress allowlist.
+2. Registry: the server name in `mcp.json` matches a registry entry (unlisted servers are hidden; the IDE shows "N servers hidden"), and the registry is served over HTTPS with a trusted certificate.
+3. Configuration files: `~/.kiro/settings/mcp.json` (user) and `.kiro/settings/mcp.json` (workspace). A workspace file is not loaded while the workspace is untrusted.
+4. Runner and package source: `uvx`, `npx` or `docker` installed, and PyPI, npm or the internal mirror reachable.
+5. MCP logs: Kiro panel → Output → "Kiro - MCP Logs"
+6. Network connectivity to the MCP server endpoint (remote servers)
+
+### Issue: All agent tool calls are denied, or a managed-settings warning appears
+
+**Check:**
+1. `managed-settings.json` is valid JSON, uses only `deny` / `ask` effects and only documented fields; an invalid file makes Kiro deny all tool calls until it is fixed.
+2. Windows: the file is UTF-8 without BOM (Appendix A).
+3. Restart Kiro after every change to the file.
 
 ### Issue: DLP blocking legitimate operations
 
@@ -657,6 +924,8 @@ aws workspaces reboot-workspaces --reboot-workspace-requests WorkspaceId=ws-xxxx
   }
 }
 ```
+
+This block and the DLP rules below are illustrative policy definitions for your data classification standard and your DLP product. They are not Kiro configuration files: Kiro does not read them.
 
 **DLP Policy Enhancement for PDPA:**
 
@@ -815,41 +1084,37 @@ The Monetary Authority of Singapore published the **Principles to Promote Fairne
 
 **Principle:** A human developer is always accountable for code quality, regardless of whether it was AI-generated.
 
-**Implementation:**
-```json
-{
-  "kiro.codeGeneration": {
-    "requireHumanReview": true,
-    "annotateAIGenerated": true,
-    "blockDirectMerge": true,
-    "minimumReviewers": 2,
-    "auditTrail": "cloudtrail"
-  }
-}
-```
+**Implementation:** Kiro has no setting that enforces human review before merge. Enforce it where the merge happens, in source control, and use Kiro permissions so that the agent cannot push without a person approving the command.
+
+1. **Branch protection or rulesets** on the default and release branches (server-side, so they hold even if a client-side control is bypassed):
+   - require a pull request before merging, with at least two approvals (example institutional policy) and approval from code owners;
+   - dismiss stale approvals when new commits are pushed;
+   - require status checks to pass (tests, SAST, secret scanning);
+   - block force pushes and branch deletion, and apply the rules to administrators too.
+2. **CODEOWNERS** routes changes to accountable reviewers:
+   ```
+   # .github/CODEOWNERS (example)
+   *                       @example-bank/app-reviewers
+   /src/**/credit/         @example-bank/credit-risk-reviewers
+   /.github/workflows/     @example-bank/platform-security
+   /cdk/                   @example-bank/cloud-platform
+   ```
+3. **Kiro permissions:** the admin policy in [`managed-settings/`](managed-settings/) asks before `git push*` and denies force pushes and history rewrites, and it asks before the agent writes CI pipeline files or `CODEOWNERS`. In headless runs the `ask` becomes a `deny`.
 
 **Code Attribution:**
 - All Kiro-generated code must pass through standard code review
-- Pull requests should indicate AI-assisted sections (recommended, not mandatory)
-- CloudTrail logs provide full traceability of AI-assisted development activities
+- Pull requests should indicate AI-assisted sections (recommended, not mandatory), for example with an `Assisted-by: Kiro` commit trailer
+- Traceability comes from the pull request record and the Kiro prompt logs (Section 9.3). CloudTrail records AWS API calls, not the content of AI-assisted changes.
 
 ### 13.3 Transparency & Auditability
 
-**Prompt Logging for Audit:**
-```bash
-# Enable comprehensive prompt logging
-# The S3 bucket and KMS key must be in the Kiro profile region (us-east-1 or eu-central-1)
-# and in the subscribing account, not in the ap-southeast-1 workload region (Section 7.2)
-aws q put-prompt-logging-configuration \
-  --s3-bucket-name kiro-prompts-<account-id> \
-  --kms-key-id arn:aws:kms:us-east-1:account:key/xxxxx
-```
+**Prompt Logging for Audit:** enable it in the Kiro console (Settings > Kiro Settings > Logging > **Log Kiro prompts with metadata**) with the bucket policy in Section 9.3. The S3 bucket must be in the Kiro profile region (`us-east-1` or `eu-central-1`) and in the subscribing account, not in the `ap-southeast-1` workload region (Section 7.2).
 
 **What is Logged:**
-- All prompts sent to Kiro (questions, code generation requests)
-- All responses from Kiro (code suggestions, explanations)
-- MCP tool invocations and parameters
-- User identity and session context
+- Prompts sent to Kiro and Kiro's responses, in the IDE and the CLI (chat and inline suggestions)
+- User ID, timestamps, conversation IDs, code references and web links
+- MCP tool calls are not documented as part of prompt logs; record them with a `PostToolUse` hook (Section 5.3)
+- Daily per-user activity comes from the user activity reports (Section 8.2)
 
 **Audit Trail Retention:** Example institutional policy (not prescribed by MAS TRM): set the retention period per your record-keeping obligations (commonly 5–7 years).
 
@@ -864,16 +1129,22 @@ aws q put-prompt-logging-configuration \
 **Mitigation:**
 - Kiro-generated financial logic must undergo additional review by domain experts
 - Automated bias testing in CI/CD pipeline for models and decision logic
-- Steering files should include bias-awareness instructions:
+- Steering files should include bias-awareness instructions. The repository's file is [`.kiro/steering/fairness.md`](.kiro/steering/fairness.md) (always included). To include such a file only when the agent works on matching files, use `fileMatch` frontmatter:
 
-```yaml
-# .kiro/steering/fairness.md
-guidelines:
-  - "Flag any code that makes decisions based on protected characteristics"
-  - "Ensure fee calculations are applied consistently across customer segments"
-  - "Credit scoring logic must be explainable and auditable"
-  - "Alert if ML model inputs include demographic proxies"
+```markdown
+---
+inclusion: fileMatch
+fileMatchPattern: "src/**/credit/**"
+---
+# Fairness & Bias Guidelines (MAS FEAT Principles)
+
+- Flag any code that makes decisions based on protected characteristics
+- Ensure fee calculations are applied consistently across customer segments
+- Credit scoring logic must be explainable and auditable
+- Alert if ML model inputs include demographic proxies
 ```
+
+Steering is guidance, not enforcement: the review gates above are the control.
 
 ### 13.5 MAS Guidelines on AI Risk Management (2026)
 
@@ -894,7 +1165,7 @@ MAS published the final [Guidelines on Artificial Intelligence Risk Management](
 | Governance and oversight | Senior management oversight of AI tool adoption (TRM 3.1); named owner for Kiro; AI usage policy | 12.1, 13.2 |
 | AI inventory and risk materiality | Record Kiro, its models, MCP servers and custom agents in the AI inventory; document the para 2.3 materiality assessment | 12.1, 12.3 |
 | Data management | Prompt data classification, DLP rules, PDPA controls | 11.1–11.3 |
-| Safety and cybersecurity | MCP allowlist, network isolation, VDI, monitoring, penetration testing | 5, 8, 14; Part 1, Sections 3–4 |
+| Safety and cybersecurity | MCP registry, admin permission rules, network isolation, VDI, monitoring, penetration testing | 5, 6.1, 8, 14; Part 1, Sections 3–4 |
 | Human oversight / review of AI-generated code | Human review before merge, code review gates (TRM 6.1, 6.3), prompt logging | 6.3, 13.2, 13.3 |
 
 ---
@@ -930,7 +1201,8 @@ The **Association of Banks in Singapore (ABS)** published the Cloud Computing Im
 
 - Test if attackers can bypass MCP server restrictions
 - Test if DLP controls can be circumvented via AI prompts
-- Test if unauthorized MCP servers can be installed despite GPO
+- Test if unauthorized MCP servers can be used despite MCP governance (for example by editing `~/.kiro/settings/mcp.json`, opening an untrusted repository that ships `.kiro/settings/mcp.json`, or with local administrator rights)
+- Test if admin permission rules in `managed-settings.json` can be evaded (for example with quoted or indirect shell commands) and whether hooks and VDI controls catch what the globs miss
 - Validate incident detection and response capabilities for Kiro-related threats
 
 ---
@@ -946,9 +1218,9 @@ TRM section numbers follow the MAS Technology Risk Management Guidelines (Januar
 | **MAS TRM** | 3.1, 3.2 | Governance & Oversight; Policies | Senior management oversight of Kiro adoption + AI usage policy | Part 2, Section 13.5 |
 | **MAS TRM** | 3.4 | Management of Third Party Services | Kiro, MCP servers and model providers assessed as third-party services | Part 2, Section 12 |
 | **MAS TRM** | 3.6 | Security Awareness and Training | Developer training on Kiro, MCP and PDPA | Part 2, Section 9.1 |
-| **MAS TRM** | 5.4 | SDLC and Security-by-Design | Skills + steering files | Skills Guide |
+| **MAS TRM** | 5.4 | SDLC and Security-by-Design | Skills + steering files (guidance) | Skills Guide |
 | **MAS TRM** | 6.1 | Secure Coding, Source Code Review and Application Security Testing | Code review of AI-generated code (incl. third-party/open-source code, 6.1.3) + secret scanning | Part 2, Section 6 |
-| **MAS TRM** | 6.3 | DevSecOps Management | Supervised mode + human approval before merge (segregation of duties) | Part 2, Section 6 |
+| **MAS TRM** | 6.3 | DevSecOps Management | Admin permission rules (`ask` on `git push`, deny on force push) + branch protection and CODEOWNERS (human approval before merge, segregation of duties) | Part 2, Sections 6.1, 13.2 |
 | **MAS TRM** | 7.5 | Change Management | Change management workflow | Part 2, Section 6.3 |
 | **MAS TRM** | 9.1 | User Access Management | Enterprise IdP + IAM IDC + MFA + session management + RBAC | Part 1, Section 2 |
 | **MAS TRM** | 9.3 | Remote Access Management | WorkSpaces VDI as the remote access path | Part 1, Section 4 |
@@ -957,13 +1229,13 @@ TRM section numbers follow the MAS Technology Risk Management Guidelines (Januar
 | **MAS TRM** | 11.1 | Data Security | DLP + encryption + PDPA controls | Part 1, Section 4.1.3 |
 | **MAS TRM** | 11.2 | Network Security | VPC endpoints + SG + NACLs + egress allowlist (PrivateLink to Kiro only in the profile region) | Part 1, Section 3 |
 | **MAS TRM** | 11.3, 11.4 | System Security; Virtualisation Security | WorkSpaces VDI hardening | Part 1, Section 4 |
-| **MAS TRM** | 12.2 | Cyber Event Monitoring and Detection | CloudTrail + CloudWatch + monitoring | Part 2, Section 8 |
+| **MAS TRM** | 12.2 | Cyber Event Monitoring and Detection | Kiro prompt logging + user activity reports + CloudTrail + CloudWatch | Part 2, Sections 8, 9.3 |
 | **MAS TRM** | 12.3 | Incident Response | Escalation matrix + MAS notification | Part 2, Section 10 |
 | **MAS TRM** | 13.1 | Vulnerability Assessment | Annual VA of Kiro environments | Part 2, Section 14.2 |
 | **MAS TRM** | 13.2 | Penetration Testing | Annual PT of VPC + WorkSpaces | Part 2, Section 14.2 |
 | **MAS TRM** | 13.4 | Adversarial Attack Simulation Exercise | Red team of Kiro environments | Part 2, Section 14.3 |
 | **MAS TRM** | 14.1 | Online Financial Services | Not directly applicable (dev tool) | N/A |
-| **MAS TRM** | 15.1 | IT Audit | Independent IT audit of Kiro controls, using CloudTrail logs and compliance reports as evidence | Part 2, Section 8 |
+| **MAS TRM** | 15.1 | IT Audit | Independent IT audit of Kiro controls, using prompt logs, user activity reports, CloudTrail logs and compliance reports as evidence | Part 2, Section 8 |
 | **MAS Notice FSM-N05** (banks) | paras 5–8 | Availability, recovery, incident notification | ≤4h downtime / RTO ≤4h for critical systems; notify MAS ≤1h; RCA report ≤14 days | Part 2, Section 10 |
 | **PDPA** | s11–12 | Accountability | DPO + data protection policies covering AI-assisted development | Part 2, Section 11.1 |
 | **PDPA** | s24 (Protection), s25 (Retention), s26 (Transfer Limitation) | Care of Personal Data (Part 6) | DLP + data classification + encryption + purpose-based retention + transfer safeguards | Part 2, Section 11 |

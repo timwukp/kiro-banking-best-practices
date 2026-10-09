@@ -1,0 +1,101 @@
+# Kiro user-scope permissions template for banking developers
+#
+# Install as:  ~/.kiro/settings/permissions.yaml   (one file per user)
+# Applies to:  Kiro IDE 1.0+ and Kiro CLI V3 sessions (kiro-cli --v3)
+# Reference:   https://kiro.dev/docs/permissions/  (last verified 2026-10-08)
+#
+# What this file is for
+#   This is a CONVENIENCE file. It removes approval prompts for routine,
+#   low-risk developer commands so that people are not trained to click
+#   "Allow" on everything. It is NOT a security control; the security
+#   controls are the administrator policy (managed-settings.json), the
+#   Kiro console settings, workspace trust and the hooks.
+#
+# How it combines with the administrator policy
+#   - Kiro evaluates every scope (Kiro hardcoded, administration, user,
+#     workspace, agent, session) with deny-overrides: deny > ask > allow.
+#     There is no precedence between scopes; the most restrictive effect
+#     wins.
+#   - So an admin "deny" or "ask" in managed-settings.json ALWAYS wins over
+#     an "allow" here. Example: "git push*" is allowed by nothing in this
+#     file, and even if you add it, the admin "ask" still prompts and the
+#     admin force-push "deny" still blocks.
+#   - This file ADDS to Kiro's built-in defaults (workspace reads, read-only
+#     git and system-info commands are already silent). It does not
+#     replace them.
+#
+# Where workspace rules live
+#   - Workspace-scope rules are stored per user OUTSIDE the repository at
+#     ~/.kiro/workspace-roots/<hash>/permissions.yaml ("This workspace" in
+#     the Always allow picker). A cloned repository cannot inject permission
+#     rules. Do not commit permission files to repositories.
+#   - The agent can never write ~/.kiro/settings/, .kiro/settings/ or
+#     ~/.kiro/workspace-roots/ (Kiro hardcoded deny), so it cannot edit this
+#     file to grant itself more access.
+#
+# Pattern syntax (official)
+#   - shell: "*" matches any sequence of characters; no "**", "?" or
+#     character classes. Compound commands (; && || |) are split and every
+#     sub-command is checked on its own, so "npm test*" does not approve
+#     "npm test ; curl ...".
+#   - fs_read / fs_write: "*" stays within one path component, "**" crosses
+#     directories, {a,b} and [abc] are supported.
+#   - Globs only, no regular expressions.
+#
+# Headless / non-interactive runs treat every "ask" as "deny".
+#
+# Do NOT add any of the following here:
+#   - "capability: all" or "capability: shell" without a match list
+#   - "capability: fs_read" without a match list (would allow reads
+#     anywhere on disk, for example ~/.ssh, outside the admin deny list)
+#   - "git push*", "npm publish*", "cdk deploy*" or any cloud CLI write
+#     command (the admin policy asks or denies these anyway)
+
+rules:
+  # Read-only and local inspection commands (most read-only git commands are
+  # already allowed by default; listing them keeps the intent explicit).
+  - capability: shell
+    effect: allow
+    match:
+      - "git status*"
+      - "git diff*"
+      - "git log*"
+      - "git show*"
+      - "git blame*"
+      - "ls"
+      - "ls *"
+
+  # Local build, test and lint commands for this repository (Node.js and CDK).
+  # "npx cdk synth" generates templates locally; it does not deploy.
+  - capability: shell
+    effect: allow
+    match:
+      - "npm test*"
+      - "npm run test*"
+      - "npm run lint*"
+      - "npm run build*"
+      - "npx tsc --noEmit*"
+      - "npx jest*"
+      - "npx cdk synth*"
+      - "cdk synth*"
+
+  # Silent writes only inside source, test and documentation folders of the
+  # workspace. Everything else (CI pipelines, steering, root config files)
+  # still prompts; secrets and credential paths are denied by the admin
+  # policy.
+  - capability: fs_write
+    effect: allow
+    match:
+      - "src/**"
+      - "test/**"
+      - "tests/**"
+      - "docs/**"
+
+  # Optional: trust read-only tools of an MCP server that your administrator
+  # has approved in the MCP registry. MCP patterns are "<server>/<tool>".
+  # In an untrusted workspace Kiro still asks before every MCP tool call.
+  # - capability: mcp
+  #   effect: allow
+  #   match:
+  #     - "aws-documentation/search_documentation"
+  #     - "aws-documentation/read_documentation"

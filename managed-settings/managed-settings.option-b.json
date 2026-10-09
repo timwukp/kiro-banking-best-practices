@@ -1,0 +1,274 @@
+{
+  "rules": [
+    {
+      "capability": "signin_method",
+      "match": ["*"],
+      "exclude": ["external_idp"],
+      "effect": "deny"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "git push *--force*",
+        "git push -f*",
+        "git push * -f*",
+        "git push *+*",
+        "git push * :*",
+        "git push *--mirror*",
+        "git push *--delete*",
+        "git push -d*",
+        "git push * -d *",
+        "git push *--prune*",
+        "git reset *--hard*",
+        "git clean -*f*",
+        "git branch *-D*",
+        "git filter-branch*",
+        "git filter-repo*",
+        "git update-ref -d*",
+        "git reflog expire*"
+      ],
+      "effect": "deny"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "git commit *--no-verify*",
+        "git commit -n*",
+        "git push *--no-verify*",
+        "git config *core.hooksPath*"
+      ],
+      "effect": "deny"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "rm -rf /*",
+        "rm -rf ~*",
+        "rm -rf $HOME*",
+        "rm -rf ..*",
+        "rm -rf .git*",
+        "rm -rf ./.git*",
+        "rm -fr /*",
+        "rm -fr ~*",
+        "rm -fr $HOME*",
+        "rm -fr ..*",
+        "rm -fr .git*",
+        "rm -fr ./.git*",
+        "mkfs*",
+        "dd *of=/dev/*"
+      ],
+      "effect": "deny"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "sudo *",
+        "su *",
+        "doas *",
+        "chown *",
+        "chmod 777 *",
+        "chmod * 777 *"
+      ],
+      "effect": "deny"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "bash -c *",
+        "bash -lc *",
+        "sh -c *",
+        "zsh -c *",
+        "/bin/bash -c *",
+        "/bin/sh -c *",
+        "/bin/zsh -c *",
+        "eval *"
+      ],
+      "effect": "deny"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "curl *",
+        "wget *",
+        "nc *",
+        "ncat *",
+        "netcat *",
+        "telnet *",
+        "ftp *",
+        "scp *",
+        "sftp *"
+      ],
+      "effect": "deny"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "aws iam *",
+        "aws organizations *",
+        "aws sts assume-role*",
+        "aws secretsmanager get-secret-value*",
+        "aws ssm get-parameter*--with-decryption*",
+        "aws kms decrypt*"
+      ],
+      "effect": "deny"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "git push*",
+        "git remote add*",
+        "git remote set-url*",
+        "gh *",
+        "ssh *"
+      ],
+      "effect": "ask"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "npm publish*",
+        "npm unpublish*",
+        "yarn publish*",
+        "pnpm publish*",
+        "twine upload*",
+        "docker push*",
+        "mvn deploy*",
+        "cdk deploy*",
+        "cdk destroy*",
+        "npx cdk deploy*",
+        "npx cdk destroy*",
+        "terraform apply*",
+        "terraform destroy*"
+      ],
+      "effect": "ask"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "aws * create-*",
+        "aws * delete-*",
+        "aws * put-*",
+        "aws * update-*",
+        "aws * terminate-*",
+        "aws s3 cp*",
+        "aws s3 mv*",
+        "aws s3 rm*",
+        "aws s3 rb*",
+        "aws s3 sync*"
+      ],
+      "effect": "ask"
+    },
+    {
+      "capability": "shell",
+      "match": [
+        "rm -r*",
+        "rm -R*",
+        "rm -f*",
+        "rm *--recursive*",
+        "xargs *",
+        "find * -exec*",
+        "find * -delete*",
+        "python -c *",
+        "python3 -c *",
+        "node -e *",
+        "perl -e *",
+        "ruby -e *"
+      ],
+      "effect": "ask"
+    },
+    {
+      "capability": "fs_read",
+      "match": ["**/.env", "**/.env.*"],
+      "exclude": ["**/.env.example", "**/.env.sample", "**/.env.template"],
+      "effect": "deny"
+    },
+    {
+      "capability": "fs_read",
+      "match": [
+        "**/*.pem",
+        "**/*.key",
+        "**/*.p12",
+        "**/*.pfx",
+        "**/*.jks",
+        "**/*.keystore",
+        "**/id_rsa*",
+        "**/id_ecdsa*",
+        "**/id_ed25519*",
+        "secrets/**",
+        "**/secrets/**",
+        "~/.ssh/**",
+        "~/.aws/credentials",
+        "~/.aws/sso/cache/**",
+        "~/.aws/cli/cache/**",
+        "~/.kube/config",
+        "~/.docker/config.json",
+        "~/.netrc",
+        "~/.git-credentials",
+        "~/.npmrc",
+        "~/.config/gh/hosts.yml"
+      ],
+      "effect": "deny"
+    },
+    {
+      "capability": "fs_write",
+      "match": [
+        "**/*.pem",
+        "**/*.key",
+        "**/*.p12",
+        "**/*.pfx",
+        "~/.ssh/**",
+        "~/.aws/**",
+        "~/.bashrc",
+        "~/.bash_profile",
+        "~/.profile",
+        "~/.zshrc",
+        "~/.zprofile",
+        "~/.zshenv",
+        "~/.gitconfig",
+        "~/.npmrc",
+        "~/Library/LaunchAgents/**",
+        "~/.config/autostart/**"
+      ],
+      "effect": "deny"
+    },
+    {
+      "capability": "fs_write",
+      "match": [
+        "**/.github/workflows/**",
+        "**/.github/actions/**",
+        "**/.gitlab-ci.yml",
+        "**/Jenkinsfile",
+        "**/buildspec*.yml",
+        "**/azure-pipelines*.yml",
+        "**/CODEOWNERS",
+        "**/.pre-commit-config.yaml"
+      ],
+      "effect": "ask"
+    },
+    {
+      "capability": "fs_write",
+      "match": [
+        ".kiro/steering/**",
+        ".kiro/skills/**",
+        "~/.kiro/steering/**",
+        "~/.kiro/skills/**",
+        "**/AGENTS.md"
+      ],
+      "effect": "ask"
+    },
+    {
+      "capability": "web_fetch",
+      "effect": "ask"
+    },
+    {
+      "capability": "web_search",
+      "effect": "ask"
+    }
+  ],
+  "settings": {
+    "external_idp_domain": "bank.example.com",
+    "external_idp_start_url": "https://idp.example.com/kiro/start",
+    "external_idp_region": "us-east-1",
+    "signin_help_url": "https://it.example.com/kiro-sign-in-help"
+  }
+}

@@ -1,198 +1,242 @@
 # Kiro Privacy and Security
 
+> **Source:** https://kiro.dev/docs/privacy-and-security/ and its sub-pages: [Data protection](https://kiro.dev/docs/privacy-and-security/data-protection/) (updated 2026-09-30), [Firewalls, proxies, and data perimeters](https://kiro.dev/docs/privacy-and-security/firewalls/) (2026-10-01), [VPC endpoints](https://kiro.dev/docs/privacy-and-security/vpc-endpoints/) (2026-08-04), [Compliance validation](https://kiro.dev/docs/privacy-and-security/compliance-validation/) (2026-09-03), plus [Permissions](https://kiro.dev/docs/permissions/) (2026-10-01) and [Supported regions](https://kiro.dev/docs/enterprise/supported-regions/) (2026-08-04).
+> **Last verified:** 2026-10-08.
+
 ## Data Storage
 
-Kiro stores your questions, its responses, and additional context to generate new responses. Content storage location depends on your subscription type:
+Kiro stores your questions, its responses and additional context to provide the service. Where content is stored depends on the user type:
 
-- **Free Tier/Individual subscribers**: Content stored in US East (N. Virginia) Region
-- **Enterprise users**: Content stored in the AWS Region where your Kiro profile was created
+- **Free Tier users and individual subscribers** (paid, social login or AWS Builder ID): content is stored in US East (N. Virginia) `us-east-1`. Subject to opt-out, it may be used for service improvement. Free Tier inputs may also be stored for up to 60 days for abuse detection.
+- **Enterprise users:** content may be stored in the AWS Region where the Kiro profile is configured (for example for prompt logging and daily activity reports). It is not used for service improvement. Prompt logs and user activity reports, when enabled, are written to a customer-selected Amazon S3 bucket in the customer's account, in the profile Region.
+
+**Kiro profile Regions:** US East (N. Virginia) `us-east-1`, Europe (Frankfurt) `eu-central-1`, AWS GovCloud (US-East) and AWS GovCloud (US-West). There is no Asia Pacific profile Region. IAM Identity Center can be in 19 Regions, including Asia Pacific (Singapore) `ap-southeast-1`; the Identity Center Region holds identities and subscriptions and can differ from the profile Region. Data storage and inference happen in the profile Region.
+
+**Client telemetry (IDE 1.2+):** the IDE sends telemetry and activity data to the Kiro telemetry endpoint in the Region of the selected enterprise profile; if there is no endpoint in that Region, it drops the telemetry rather than sending it elsewhere.
 
 ## Cross-region Processing
 
-Kiro uses Amazon Bedrock with cross-region inference to distribute traffic across AWS Regions for enhanced performance and reliability. This doesn't affect where your data is stored.
+Kiro is powered by Amazon Bedrock and uses cross-region inference to distribute traffic across AWS Regions. For Geography-scope models, which include all Claude models, traffic stays within the same geography; Global-scope models may be processed in AWS Regions worldwide (see [Inference scope per model](#inference-scope-per-model)). This does not change where data is stored.
 
-### Supported regions for cross-region inference
+| Geography | Inference Regions |
+|-----------|-------------------|
+| United States | us-east-1, us-west-2, us-east-2, AWS GovCloud (US-East), AWS GovCloud (US-West) |
+| Europe | eu-central-1, eu-west-1, eu-west-3, eu-north-1, eu-south-1, eu-south-2 |
 
-**United States:**
-- US East (N. Virginia) (us-east-1)
-- US West (Oregon) (us-west-2)
-- US East (Ohio) (us-east-2)
-- AWS GovCloud (US-East)
-- AWS GovCloud (US-West)
+There is no APAC geography.
 
-**Europe:**
-- Europe (Frankfurt) (eu-central-1)
-- Europe (Ireland) (eu-west-1)
-- Europe (Paris) (eu-west-3)
-- Europe (Stockholm) (eu-north-1)
-- Europe (Milan) (eu-south-1)
-- Europe (Spain) (eu-south-2)
+### Inference scope per model
 
-### Global cross-region inference for experimental features
+Some Kiro models and capabilities use global cross-region inference. The Inference endpoint regions table on the [models page](https://kiro.dev/docs/models/) (updated 2026-10-08) gives each model an inference scope, and a capability that uses Global routing says so in its documentation:
 
-For experimental models and capabilities, Kiro may use global cross-region inference across supported commercial AWS Regions worldwide to optimize performance.
+| Scope | Where inference may run | Endpoint | Models (2026-10-08) |
+|-------|-------------------------|----------|---------------------|
+| Geography | Within the endpoint geography | US for US profiles; EU for Frankfurt (`eu-central-1`) profiles | Every model not marked Global, including all Claude models (Fable 5.1 Preview: US only), Auto, DeepSeek 3.2, MiniMax, GLM-5 and Qwen3 Coder Next |
+| Global | Across supported commercial AWS Regions worldwide, including outside the endpoint geography | US for both US and Frankfurt profiles | GPT-5.6 Sol, Terra and Luna |
+
+Cross-region inference, including global routing, does not change where Kiro stores data, and global routing does not apply to AWS GovCloud (US). Lifecycle status and inference scope are independent: Claude Opus 5.5 and Sonnet 5.5 launched with "experimental support" and have Geography scope.
+
+There is no documented setting to disable cross-region inference. The available lever is **model governance** (Kiro console > Settings > Shared settings > model availability > Manage approved list): with a managed list, new models are not available until an administrator adds them, so Global-scope models can be kept out when processing must stay within one geography, and preview models can be held back until their terms (for example, Claude Fable 5.1's 30-day retention) are assessed.
+
+### Abuse detection retention
+
+- All users, all models: automated abuse detection through Amazon Bedrock.
+- OpenAI GPT models: classifier-flagged traffic retained for up to 30 days.
+- Anthropic Claude Fable 5.1 (Preview): **all** traffic retained for up to 30 days; classifier-flagged traffic may be reviewed by AWS personnel.
+- Free Tier: inputs may additionally be stored for up to 60 days.
+
+### Banking note (Singapore)
+
+Identity can stay in Singapore (IAM Identity Center in `ap-southeast-1`), but prompts, code context and responses are stored and processed in the Kiro profile Region (`us-east-1` or `eu-central-1`) and may be processed in other Regions of the same geography (or, for Global-scope models such as GPT-5.6, in AWS Regions worldwide). Treat this as a cross-border transfer: apply the PDPA Transfer Limitation Obligation (section 26), assess Kiro under MAS TRM 3.4 and the outsourcing guidelines, keep customer information out of prompts, and use model governance to exclude Global-scope models (and review preview terms such as Claude Fable 5.1's 30-day retention). MAS TRM does not impose a data-localisation mandate; data location is an institution's own policy choice.
 
 ## Data Encryption
 
 ### Encryption in transit
-All communication uses TLS 1.2 or higher connections.
+
+All communication between customers and Kiro, and between Kiro and its downstream dependencies, uses TLS 1.2 or higher.
 
 ### Encryption at rest
-- Kiro encrypts data using AWS owned encryption keys from AWS KMS
-- Enterprise administrators can create customer managed keys for additional control
-- Only symmetric keys are supported
+
+- Kiro encrypts data with AWS owned keys from AWS KMS by default.
+- Enterprise administrators can configure a customer managed key in Kiro console > Settings > Encryption key. Only symmetric keys are supported. Customer managed keys do not apply to Kiro Web.
+- The documentation does not list exactly which features the customer managed key covers or its Region constraint; verify with AWS before relying on it in a control statement.
 
 ## Service Improvement
 
-### Content used for service improvement
-Kiro may use content from Free Tier and individual subscribers for service improvement, including:
-- Questions asked to Kiro
-- Other inputs provided
-- Responses and code generated
+Kiro may use content from Free Tier users and individual subscribers (including paid users who sign in with GitHub, Google or AWS Builder ID) for service improvement: questions, other inputs, and generated responses and code.
 
-**Enterprise users' content is NOT used for service improvement.**
+**Enterprise users' content is NOT used for service improvement.** Users who access Kiro through an Amazon Q Developer Pro subscription in their AWS account are also excluded.
 
 ## Opt Out of Data Sharing
 
-### IDE
-1. Open Settings in Kiro
-2. Switch to User sub-tab
-3. Choose Application → Telemetry and Content
-4. Uncheck boxes for telemetry and content collection
+Enterprise users are automatically opted out of telemetry and content collection by AWS. Telemetry for user activity reports is controlled by the administrator in the Kiro console and cannot be changed by enterprise users.
 
-### CLI
-1. Open Preferences in Kiro CLI
-2. Toggle off Telemetry setting
-3. Toggle off Share Kiro content with AWS setting
+Free Tier users and individual subscribers can opt out:
+
+- **IDE:** Settings > User > Application > Telemetry and Content. Uncheck "Data Sharing and Prompt Logging: Usage Analytics And Performance Metrics" (telemetry) and "Data Sharing and Prompt Logging: Content Collection for Service Improvement" (content).
+- **CLI:** open Preferences in Kiro CLI, then toggle off the Telemetry setting and the "Share Kiro content with AWS" setting.
+
+Opting out does not affect storage of Free Tier inputs for abuse detection.
 
 ## Types of Telemetry Collected
 
-- **Usage data**: Kiro version, OS, anonymous machine ID
-- **Performance metrics**: Request count, errors, latency for features like login, tab completion, code generation, tools, MCP
+- **Usage data:** Kiro version, operating system and anonymous machine ID.
+- **Performance metrics:** request count, errors and latency for login, tab completion, code generation, steering, hooks, spec generation, tools and MCP.
 
-## Autopilot vs Supervised Mode
+## Agent Autonomy and Permissions (IDE 1.0+, CLI V3)
 
-### Autopilot mode (default)
-- Kiro executes multiple steps autonomously
-- Makes decisions based on requirements
-- Can be toggled on/off anytime
-- Can be interrupted to regain manual control
+The IDE 0.x "Trusted Commands" and "Command Denylist" settings were replaced in IDE 1.0 by the capability-based permission system (`permissions.yaml`). Trusted command prefixes translate to `allow` rules and denylist entries to `deny` rules; `kiroAgent.trustedCommands` and `kiroAgent.commandDenylist` are no longer used. The Kiro CLI V3 engine uses the same model.
 
-### Supervised mode
-- Kiro suggests actions but waits for confirmation
-- Asks clarifying questions when needed
-- User reviews and approves each change
-- Maintains full control over development process
+**Agent autonomy (IDE).** Settings > Agent > Agent Autonomy, settings key `kiroAgent.agentAutonomy`:
 
-## Trusted Commands
+- **Autopilot:** the agent proceeds with allowed operations without prompting.
+- **Supervised:** the agent prompts before any action.
 
-By default, Kiro requires approval before running commands. You can configure trusted commands:
-- **Exact matching**: Commands must match exactly (e.g., `npm install`)
-- **Wildcard matching**: Use `*` to trust variations (e.g., `npm *`)
-- **Universal trust**: Use `*` alone to trust all commands (use with extreme caution)
+The permission rules apply after the autonomy mode decides whether to proceed.
+
+**Permission rules.** Each rule has a `capability` (`fs_read`, `fs_write`, `shell`, `web_fetch`, `web_search`, `mcp`, …), optional `match` and `exclude` globs, and an `effect` (`deny`, `ask`, `allow`). Rules come from the Kiro hardcoded scope, the administrator policy (`managed-settings.json`), the user file (`~/.kiro/settings/permissions.yaml`), the per-user workspace file (`~/.kiro/workspace-roots/<hash>/permissions.yaml`, outside the repository), agent profiles and the session. They are combined with deny-overrides: `deny > ask > allow`, regardless of scope. Headless runs treat `ask` as `deny`.
+
+**Workspace trust.** Kiro treats a workspace as untrusted until the user trusts it. While untrusted it does not load the workspace's custom agents, steering, MCP configuration, skills or workflows, and it asks before every shell command and MCP tool call.
+
+Details: [permissions-and-managed-settings.md](permissions-and-managed-settings.md). Deployable banking templates: [`../managed-settings/`](../managed-settings/).
 
 ## Best Practices
 
 ### Protecting your resources
-When using GitHub or Google authentication, Kiro may access:
-- Local files and repositories
-- Environment variables
-- AWS credentials stored in your environment
-- Configuration files with sensitive information
+
+The agent runs with the user's local permissions and may access:
+
+- local files and repositories;
+- environment variables;
+- AWS credentials stored in the environment;
+- configuration files with sensitive information.
 
 ### Recommendations
-1. **Workspace Isolation**
-   - Keep sensitive projects in separate workspaces
-   - Use .gitignore to prevent access to sensitive files
-   - Consider using workspace trust features
 
-2. **Use a Clean Environment**
-   - Create dedicated user account or container for Kiro
-   - Limit access to only needed repositories and resources
+1. **Workspace isolation and trust**
+   - Keep sensitive projects in separate workspaces.
+   - Leave unknown or third-party repositories untrusted.
+   - Deny reads of secrets with `fs_read` deny rules (admin policy or `permissions.yaml`); `.gitignore` alone does not stop the agent from reading a file.
 
-3. **Manage AWS Credentials Carefully**
-   - Use temporary credentials with appropriate permissions
-   - Consider using AWS named profiles to isolate access
-   - Remove AWS credentials when not needed for sensitive work
+2. **Use a clean environment**
+   - Use a dedicated user account, VDI or container for Kiro.
+   - Limit access to only the repositories and resources needed.
 
-4. **Repository Access Control**
-   - Review which repositories Kiro can access
-   - Use repository-specific access tokens when possible
-   - Regularly audit access permissions
+3. **Manage AWS credentials carefully**
+   - Use temporary credentials with least-privilege permissions.
+   - Use AWS named profiles to isolate access.
+   - Remove AWS credentials when they are not needed for the task.
+
+4. **Repository access control**
+   - Review which repositories Kiro can access.
+   - Use repository-specific access tokens when possible.
+   - Audit access permissions regularly.
 
 ## Code References
 
 Kiro learns from open-source projects. Code references include information about the source used to generate recommendations.
 
 ### View code reference log
-1. Go to Output tab in status bar
-2. From drop-down menu, choose "code-references"
 
-### Turn code references on/off
-1. Open Settings in Kiro
-2. Switch to User sub-tab
-3. Choose Kiro
-4. Under Code References: Reference Tracker, check/uncheck the box
+1. Go to the Output tab in the status bar.
+2. From the drop-down menu, choose "code-references".
+
+### Turn code references on or off
+
+1. Open Settings in Kiro.
+2. Switch to the User sub-tab.
+3. Choose Kiro.
+4. Under Code References: Reference Tracker, check or uncheck the box.
 
 ### Enterprise opt-out
+
 Administrators can opt out of code suggestions with references for all users in the Kiro console.
 
 ## Infrastructure Security
 
-- Kiro is protected by AWS global network security
-- Requires TLS 1.2 (recommends TLS 1.3)
-- Cipher suites with perfect forward secrecy (PFS)
-- Requests must be signed using IAM credentials or AWS STS temporary credentials
+- Kiro is protected by AWS global network security.
+- TLS 1.2 is required; TLS 1.3 is recommended.
+- Cipher suites with perfect forward secrecy (PFS) are required.
+- Requests must be signed with IAM credentials or temporary AWS STS credentials.
 
 ## VPC Endpoints (AWS PrivateLink)
 
-You can establish private connection between your VPC and Kiro using interface VPC endpoints.
+Interface VPC endpoints give a private connection from a VPC to the Kiro API **in the Kiro profile Region only**.
 
 ### Service names
-- com.amazonaws.us-east-1.q
-- com.amazonaws.eu-central-1.q
-- com.amazonaws.us-east-1.codewhisperer
 
-### Prerequisites
-- AWS account with appropriate permissions
-- VPC already created
-- Familiarity with AWS services
+- `com.amazonaws.us-east-1.q`
+- `com.amazonaws.us-east-1.codewhisperer` (us-east-1 only)
+- `com.amazonaws.eu-central-1.q`
+- `com.amazonaws.us-gov-west-1.q`
+- `com.amazonaws.us-gov-east-1.q`
+
+### Private DNS names served
+
+`q.<region>.amazonaws.com`, `runtime.<region>.kiro.dev`, `management.<region>.kiro.dev` and `telemetry.<region>.kiro.dev`, where `<region>` is `us-east-1` or `eu-central-1` (GovCloud has no `kiro.dev` names).
+
+### Notes for Singapore deployments
+
+- `com.amazonaws.ap-southeast-1.q` and `com.amazonaws.ap-southeast-1.codewhisperer` do not exist. Kiro clients do not need an Amazon Bedrock endpoint.
+- AWS cross-Region PrivateLink supports only selected services, not `q` or `codewhisperer`, so a Singapore VPC cannot create a Kiro interface endpoint directly.
+- Options: (a) a "Kiro access VPC" in the profile Region with the endpoints, private DNS disabled, Route 53 private hosted zones for the names above associated with the Singapore VPC, connected by inter-Region VPC peering or Transit Gateway peering; or (b) place the VDI in the profile Region.
+- Either way, sign-in, downloads and `app.kiro.dev` are public HTTPS, so an allowlisted egress path is still required (next section).
 
 ## Compliance Validation
 
-Kiro follows AWS compliance programs. Resources:
-- AWS services in Scope by Compliance Program
-- AWS Compliance Programs
-- Security Compliance & Governance guides
-- HIPAA Eligible Services Reference
-- AWS Compliance Resources
-- AWS Customer Compliance Guides
-- AWS Config for resource evaluation
-- AWS Security Hub for comprehensive security view
-- Amazon GuardDuty for threat detection
-- AWS Audit Manager for continuous auditing
+- Kiro (IDE and CLI) is HIPAA eligible.
+- Kiro is in scope of the AWS ISO/IEC 27001:2022 certification (since 2026-09-01).
+- No SOC report or MTCS (Singapore) certification is listed for Kiro on the compliance page; check AWS Artifact and "AWS services in Scope by Compliance Program" for the current status.
+- FedRAMP High and DoD IL-4/5 (2026-06-25) apply to AWS GovCloud (US) only.
+- Related AWS resources: AWS Compliance Programs, Security Compliance & Governance guides, AWS Customer Compliance Guides, AWS Config, AWS Security Hub, Amazon GuardDuty, AWS Audit Manager.
 
 ## Firewall and Proxy Configuration
 
-### URLs to allowlist
+Allowlist the specific host names below. The documentation also lists broad wildcards (`*.kiro.dev`, `*.app.kiro.dev`, `*.kiro.aws.dev`, `*.amazonaws.com`, `*.shortbread.aws.dev`, `*.signin.aws`); prefer the specific names, because `*.amazonaws.com` is too broad for a bank (it allows any S3 bucket).
 
-**Authentication:**
-- *.kiro.dev
-- <idc-directory-id-or-alias>.awsapps.com
-- oidc.<sso-region>.amazonaws.com
-- *.sso.<sso-region>.amazonaws.com
-- *.sso-portal.<sso-region>.amazonaws.com
-- *.aws.dev
-- *.awsstatic.com
-- *.console.aws.a2z.com
-- *.sso.amazonaws.com
+**Core**
 
-**Kiro & Language Processing:**
-- https://aws-toolkit-language-servers.amazonaws.com/
-- https://aws-language-servers.us-east-1.amazonaws.com/
+- `app.kiro.dev`
+- `assets.app.kiro.dev`
 
-**Telemetry:**
-- https://client-telemetry.us-east-1.amazonaws.com
-- https://cognito-identity.us-east-1.amazonaws.com
-- https://prod.us-east-1.telemetry.desktop.kiro.dev
-- https://prod.us-east-1.auth.desktop.kiro.dev
+**Kiro IDE**
+
+- `prod.us-east-1.auth.desktop.kiro.dev`
+- `prod.us-east-1.telemetry.desktop.kiro.dev`
+- `prod.download.desktop.kiro.dev`
+- `q.us-east-1.amazonaws.com`, `q.eu-central-1.amazonaws.com` (legacy endpoints; must still be allowlisted)
+- `runtime.us-east-1.kiro.dev`, `runtime.eu-central-1.kiro.dev`
+- `management.us-east-1.kiro.dev`, `management.eu-central-1.kiro.dev`
+- `telemetry.us-east-1.kiro.dev`, `telemetry.eu-central-1.kiro.dev`
+
+**Kiro CLI** (the IDE list, plus)
+
+- `cli.kiro.dev`
+- `prod.download.cli.kiro.dev`
+- `desktop-release.q.us-east-1.amazonaws.com`
+
+**IAM Identity Center**
+
+- `<region>.signin.aws`
+- `<sso-region>.signin.aws.amazon.com`
+- `<idc-directory-id-or-alias>.awsapps.com`
+- `portal.sso.<sso-region>.amazonaws.com`
+- `assets.sso-portal.<sso-region>.amazonaws.com`
+- `oidc.<sso-region>.amazonaws.com`
+
+**External identity provider (direct federation)**
+
+- `login.microsoftonline.com` or `<your-org>.okta.com`
+
+**Social sign-in** (block for enterprise use)
+
+- `cognito-identity.us-east-1.amazonaws.com`
+
+**Optional** (extensions, Powers and MCP)
+
+- `open-vsx.org`, `openvsx.eclipsecontent.org`, `github.com`, `raw.githubusercontent.com`
+
+Notes:
+
+- Browser-based sign-in bypasses proxy settings.
+- Do **not** block `prod.us-east-1.auth.desktop.kiro.dev` to stop Builder ID sign-in: it is used by every IDE sign-in. Restrict sign-in methods with the `signin_method` rule in `managed-settings.json` instead (IDE 1.2+ / CLI 2.25.0+, client-enforced, fails open if unreadable); see [`../managed-settings/`](../managed-settings/).

@@ -1,29 +1,33 @@
 {
   "name": "banking-secure",
-  "description": "MAS-compliant locked-down Kiro agent for banking SDLC. Least-privilege tools, path/command deny rules, and fail-safe PII/git/audit hooks.",
-  "tools": ["read", "write", "shell", "code", "grep", "glob"],
-  "allowedTools": ["read", "grep", "glob", "code"],
-  "toolsSettings": {
-    "write": {
-      "allowedPaths": ["./src/**", "./tests/**", "./docs/**"],
-      "deniedPaths": ["./.env", "**/.env", "**/secrets/**", "~/.aws/**", "~/.ssh/**"]
-    },
-    "shell": {
-      "allowedCommands": ["git status", "git diff", "git add .*", "git commit .*", "npm test", "npm run build"],
-      "deniedCommands": ["rm -rf .*", "sudo .*", "curl .*", "wget .*", "git push .*--force.*", "git reset --hard.*", "aws iam .*", "aws sts .*", "aws secretsmanager .*"],
-      "autoAllowReadonly": true,
-      "denyByDefault": false
-    }
+  "description": "MAS-aligned least-privilege Kiro agent for banking SDLC (defense in depth; primary control is managed-settings)",
+  "tools": ["read", "write", "shell"],
+  "allowedTools": ["read"],
+  "permissions": {
+    "rules": [
+      { "capability": "shell", "match": ["git status*", "git diff*", "git log*", "git show*", "git branch", "git branch --list*"], "effect": "allow" },
+      { "capability": "shell", "match": ["npm run lint*", "npx tsc --noEmit*"], "effect": "allow" },
+      { "capability": "shell", "match": ["npm test*", "npm run test*", "git add *", "git commit *"], "effect": "ask" },
+      { "capability": "fs_write", "match": ["src/**", "docs/**"], "effect": "allow" },
+      { "capability": "fs_read", "match": ["**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/.ssh/**", "**/.aws/credentials", "secrets/**"], "exclude": ["**/.env.example"], "effect": "deny" },
+      { "capability": "fs_write", "match": ["**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/.ssh/**", "**/.aws/**"], "effect": "deny" },
+      { "capability": "shell", "match": ["git push --force*", "git push * --force*", "git push -f*", "git push * -f*", "git reset --hard*", "sudo *", "curl *", "wget *", "aws iam *"], "effect": "deny" },
+      { "capability": "shell", "match": ["git push*"], "effect": "ask" }
+    ]
   },
   "hooks": {
     "preToolUse": [
       { "matcher": "*", "command": "/opt/kiro/hooks/pii-guard.sh", "timeout_ms": 5000 },
-      { "matcher": "shell", "command": "/opt/kiro/hooks/git-guard.sh", "timeout_ms": 5000 },
-      { "matcher": "shell", "command": "/opt/kiro/hooks/destructive-fs-guard.sh", "timeout_ms": 5000 }
+      { "matcher": "execute_bash", "command": "/opt/kiro/hooks/git-guard.sh", "timeout_ms": 5000 },
+      { "matcher": "execute_bash", "command": "/opt/kiro/hooks/destructive-fs-guard.sh", "timeout_ms": 5000 }
     ],
     "postToolUse": [
-      { "command": "/opt/kiro/hooks/audit-logger.sh", "timeout_ms": 5000 }
+      { "matcher": "*", "command": "/opt/kiro/hooks/audit-logger.sh", "timeout_ms": 5000 }
     ]
   },
-  "resources": ["file://.kiro/steering/**/*.md"]
+  "resources": [
+    "file://AGENTS.md",
+    "file://.kiro/steering/**/*.md",
+    "skill://.kiro/skills/*/SKILL.md"
+  ]
 }

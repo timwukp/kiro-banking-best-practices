@@ -1,5 +1,8 @@
 # MCP Tools Usage Guide
 
+> **Source:** https://kiro.dev/docs/mcp/usage/ (updated 2026-09-30), with https://kiro.dev/docs/mcp/registry/ (2026-10-01) and https://kiro.dev/docs/permissions/ (2026-10-01).
+> **Last verified:** 2026-10-08.
+
 ## Interacting with MCP Tools
 
 ### Direct Questions
@@ -68,18 +71,50 @@ When Kiro wants to use an MCP tool:
 
 ### Auto-Approving Trusted Tools
 
+To avoid repeated prompts for tools you trust, add tool names to the `autoApprove` array of the server (official example):
+
 ```json
 {
   "mcpServers": {
     "aws-docs": {
       "autoApprove": [
-        "mcp_aws_docs_search_documentation", 
+        "mcp_aws_docs_search_documentation",
         "mcp_aws_docs_read_documentation"
       ]
     }
   }
 }
 ```
+
+- **Naming:** the property is `autoApprove`. This page shows prefixed tool names (`mcp_<server>_<tool>`), while the configuration page describes the entries as plain "tool names". Check the name shown in the MCP panel (see [mcp-configuration.md](mcp-configuration.md)).
+- **Permission rules win:** `autoApprove` only removes Kiro's own prompt. An `mcp` rule with `ask` or `deny` in `managed-settings.json` or any `permissions.yaml` still applies (deny > ask > allow). Permission rules for MCP use `<server>/<tool>` patterns, for example `aws-docs/*`.
+- **Untrusted workspaces:** every MCP tool call asks for approval, including tools listed in `autoApprove`, and a call retried after the server asks you to sign in or open a URL asks again.
+- **Approval freshness:** before any MCP tool runs, Kiro checks that its approval is still current, so an approval withdrawn or changed while the call was waiting is not applied.
+
+### Registry Mode (Enterprise)
+
+When an administrator configures an MCP registry (Kiro console > Settings > Shared settings > MCP Registry URL), the registry is the only source of servers that can run:
+
+- Approved servers appear in the MCP panel; select one to add it to your configuration.
+- Servers in your own `mcp.json` load only if their name matches a registry entry; others are hidden and never started (the IDE shows an "N servers hidden" notice). Ask the administrator to add a server you need.
+- You can still override a registry server's environment variables (local servers), HTTP headers (remote servers) and timeout:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "registry",
+      "env": {
+        "GITHUB_TOKEN": "$GITHUB_TOKEN",
+        "GITHUB_ORG": "my-org"
+      },
+      "timeout": 60000
+    }
+  }
+}
+```
+
+`env` and `headers` merge per key with the registry defaults; `timeout` is in milliseconds. Registry mode applies to IAM Identity Center and API-key users in the IDE and CLI, not to Kiro Web. If the client cannot reach the governance API, MCP is disabled until it reconnects (fails closed). See [mcp-security.md](mcp-security.md).
 
 ## Examples by Server Type
 
@@ -200,6 +235,6 @@ Some servers request you visit an external URL (e.g., OAuth flow). Kiro displays
 
 - Be specific in requests for relevant results
 - Start with direct questions before explicit tool references
-- Auto-approve only trusted, frequently used tools
+- Auto-approve only trusted, frequently used, read-only tools (in an untrusted workspace Kiro asks anyway)
 - Combine MCP tools with local context for best results
 - Check tool parameters before approval
