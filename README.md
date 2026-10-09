@@ -7,7 +7,7 @@
 
 > **Renamed:** this repository was renamed from `kiro-banking-best-practices` to `kiro-fsi-best-practices` (October 2026). Old links and clones redirect automatically. The banking reference implementation, file names and CDK resource names are unchanged.
 
-> Security-first guidance for implementing AWS Kiro in financial services (FSI) SDLC environments, with a Singapore banking reference implementation, designed to support alignment with the Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines. Each institution remains responsible for its own compliance assessment.
+> Security-first guidance for implementing AWS Kiro in SDLC environments, designed to support alignment with the Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines. Each institution remains responsible for its own compliance assessment.
 
 ---
 
@@ -28,11 +28,11 @@
 
 ## Overview
 
-This repository provides comprehensive best practices for financial services development teams — banks, insurers, capital markets firms, payment institutions and other MAS-regulated FIs — implementing AWS Kiro (AI-powered development assistant) in Software Development Life Cycle (SDLC) environments. All guidance is designed to support alignment with MAS regulatory requirements for financial institutions operating in Singapore; each institution remains responsible for its own compliance assessment.
+This repository provides comprehensive best practices for FSI development teams implementing AWS Kiro (AI-powered development assistant) in Software Development Life Cycle (SDLC) environments. All guidance is designed to support alignment with MAS regulatory requirements for financial institutions operating in Singapore; each institution remains responsible for its own compliance assessment.
 
 ### What is AWS Kiro?
 
-AWS Kiro is an AI-powered IDE and development assistant that helps developers write, debug, and optimize code. For financial services environments, special security controls are needed to support compliance with financial services regulations.
+AWS Kiro is an AI-powered IDE and development assistant that helps developers write, debug, and optimize code. For FSI environments, special security controls are needed to support compliance with financial services regulations.
 
 ### Why This Guide?
 
