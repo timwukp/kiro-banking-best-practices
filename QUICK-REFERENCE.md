@@ -14,6 +14,11 @@
 | [Kiro-Agentic-SDLC-Banking-Best-Practices.md](Kiro-Agentic-SDLC-Banking-Best-Practices.md) | 1-4 | Architecture, Identity, Network, VDI |
 | [Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md) | 5-14 | MCP Governance, SDLC, Data Protection, PDPA, FEAT, ABS |
 | [Banking-Skills-Development-Guide.md](Banking-Skills-Development-Guide.md) | -- | Building MAS-aligned Kiro Skills |
+| [managed-settings/](managed-settings/README.md) | -- | Admin policy `managed-settings.json` (Option A and Option B), user `permissions.yaml` template, MCP registry example, deployment steps |
+| [agent-hooks/README.md](agent-hooks/README.md) | -- | Defense-in-depth hooks (secret/PII, git and destructive-command guards, audit) and the reference agent |
+| [kiro-docs/agent-runtime-governance.md](kiro-docs/agent-runtime-governance.md) | Layer 4 | How admin policy, console settings, workspace trust, permissions, hooks and audit fit together |
+| [kiro-docs/permissions-and-managed-settings.md](kiro-docs/permissions-and-managed-settings.md) | -- | Permission rules and precedence, sign-in controls, hooks, custom agents (Kiro 1.x) |
+| [mdm/](mdm/) | -- | MDM lockdown scripts for Windows, macOS and Linux (official paths, drift check, dry-run tests); guide: [kiro-docs/mdm-endpoint-enforcement.md](kiro-docs/mdm-endpoint-enforcement.md) |
 
 ---
 
@@ -28,15 +33,20 @@ See [README.md - Security Architecture](README.md#security-architecture) for ful
 
 ---
 
-## Implementation Phases (6 Weeks)
+## Implementation Plan (Effort and Exit Criteria)
 
-| Phase | Week | Focus | Key Deliverable |
-|-------|------|-------|-----------------|
-| 1 | 1-2 | Identity & Access | Enterprise IdP integration + MFA |
-| 2 | 2-3 | Network Security | Private VPC + allowlisted HTTPS egress (Kiro PrivateLink only in the profile region) |
-| 3 | 3-4 | VDI Deployment | WorkSpaces + DLP + GPO |
-| 4 | 4-5 | MCP Governance | Centralized whitelist + permissions |
-| 5 | 5-6 | Monitoring & Compliance | CloudTrail + validation scripts |
+No fixed calendar: the hands-on work totals a few days, and the calendar is set by IdP/SCIM coordination, MCP security reviews and change approvals. Measure progress by the exit criteria, not by elapsed weeks. Details and assumptions: [README – Implementation plan](README.md#implementation-plan).
+
+| Workstream | Effort* | Exit criterion (objective evidence) |
+|------------|---------|-------------------------------------|
+| Identity & access (IdP + SCIM + MFA) | ~0.5–1 d | Test user provisioned via SCIM; MFA enforced; social / Builder ID sign-in blocked |
+| Network isolation (endpoints, SG/NACL, egress allowlist) | ~0.5–1 d | `cdk synth` clean; VDI reaches Kiro only through the allowlisted egress path; no inbound public endpoint |
+| Secure VDI (WorkSpaces + GPO/DLP) | ~1–2 d | Encrypted WorkSpace; no local admin rights; `managed-settings.json` present, valid and read-only; agent `git push --force` denied with the source "administration" |
+| MCP governance | ~0.5 d | MCP Registry URL set; every entry pins an exact version; an unlisted server stays hidden |
+| Agent runtime + endpoint enforcement | ~0.5–1 d | `agent-hooks/tests/run-tests.sh` and `mdm/tests/test-lockdown.sh` green; chaos harness shows 0 unexpected bypasses |
+| Monitoring & compliance | ~0.5 d | Prompt logs and user activity reports in S3 (profile region) and the SIEM; test alarm fires; MAS TRM mapping reviewed |
+
+\* Hands-on time, assuming the prerequisite already exists. Estimates are illustrative; validate them in your environment.
 
 ---
 
@@ -66,12 +76,12 @@ See [README.md - Security Architecture](README.md#security-architecture) for ful
 
 - [ ] Enterprise IdP integrated (SAML 2.0 / OIDC + SCIM)
 - [ ] MFA enabled for all users
-- [ ] Social logins blocked at firewall
-- [ ] VPC endpoints created for Kiro services
+- [ ] Admin policy `managed-settings.json` deployed read-only by MDM/GPO (sign-in restricted to the corporate identity, so Builder ID and social logins are removed)
+- [ ] AWS service endpoints in the workload region and an allowlisted HTTPS egress path for Kiro (Kiro PrivateLink exists only in the profile region)
 - [ ] WorkSpaces deployed with encryption
 - [ ] DLP agents installed and configured
-- [ ] Centralized MCP config deployed (read-only)
-- [ ] CloudTrail logging enabled with data events
+- [ ] MCP governance on: MCP Registry URL set in the Kiro console, exact versions pinned
+- [ ] CloudTrail logging enabled (management events, log file validation)
 - [ ] KMS customer-managed keys configured
 - [ ] Prompt logging enabled
 - [ ] Incident response plan documented
@@ -82,8 +92,8 @@ See [README.md - Security Architecture](README.md#security-architecture) for ful
 
 | Tier | Status | Servers | Risk Level |
 |------|--------|---------|------------|
-| **1** | Pre-Approved | AWS Docs, Git, Filesystem | Low |
-| **2** | Conditional | GitHub, Docker, Kubernetes | Medium |
+| **1** | Pre-Approved | AWS Docs, Git (read-only) | Low |
+| **2** | Conditional | GitHub, Docker, Kubernetes, Filesystem | Medium |
 | **3** | Prohibited | Web Search, Browser, Custom | High |
 
 ---

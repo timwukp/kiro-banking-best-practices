@@ -1,28 +1,50 @@
 # Security Policy
 
+## Supported Versions
+
+| Version | Supported |
+|---------|-----------|
+| 1.9.x   | Yes       |
+| < 1.9   | No        |
+
+Fixes are made on `main` and released in the next version; older versions are not patched.
+
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in this repository, please report it responsibly.
+If you discover a security vulnerability in this repository, please report it privately.
 
-**Do NOT open a public GitHub issue for security vulnerabilities.**
+**Do NOT put vulnerability details in a public GitHub issue, pull request or discussion.**
 
 ### How to Report
 
-1. Email the maintainers with a description of the vulnerability
-2. Include steps to reproduce the issue
-3. Provide any relevant screenshots or logs (with sensitive data redacted)
+1. **Preferred: GitHub private vulnerability reporting.** Open the repository's **Security** tab
+   and choose **Report a vulnerability**. The report is visible only to you and the maintainers.
+2. **If that button is not available** (private reporting is not enabled), open a minimal public
+   issue titled "Request for a private security contact". Do not include any details about the
+   vulnerability; a maintainer will reply with a private channel.
+
+In the private report, include:
+
+- A description of the vulnerability and its impact
+- The affected files, versions or commits
+- Steps to reproduce
+- Any relevant screenshots or logs, with credentials, PII and customer data removed
 
 ### What to Expect
 
 - Acknowledgment within 48 hours
 - Assessment and severity classification within 5 business days
-- Remediation timeline communicated based on severity
+- A remediation timeline communicated based on severity
 
 ### Scope
 
-This repository contains documentation, infrastructure-as-code (CDK), and Kiro Skills for banking environments. Security concerns may include:
+This repository contains documentation, infrastructure-as-code (CDK), Kiro managed-settings
+policies, agent hooks, MDM reference scripts and Kiro Skills for banking environments. Security
+concerns may include:
 
 - Insecure infrastructure patterns in CDK stacks
+- Managed-settings or permission examples that are weaker than documented
+- Hooks, MDM scripts or tests that can be bypassed, or that execute untrusted input
 - Credentials or PII accidentally committed
 - MAS TRM compliance gaps in recommended configurations
 - Incorrect security guidance that could lead to vulnerabilities
@@ -34,19 +56,57 @@ This repository contains documentation, infrastructure-as-code (CDK), and Kiro S
 - Vulnerabilities in Kiro IDE/CLI (report to [AWS](https://aws.amazon.com/security/vulnerability-reporting/))
 - General MAS regulatory interpretation questions
 
+## Automated Checks
+
+These checks are pattern-based safety nets, not a full secret scanner. They do not scan git
+history, binary files or encoded content, and they do not recognise every credential format
+(for example GitHub tokens, passwords or generic API keys). Enable GitHub secret scanning and
+push protection on the repository as well.
+
+### `./validate-repo.sh` (read-only, run locally and in CI)
+
+It never modifies files and makes no network calls. It fails (exit 1) on ERRORs only.
+
+| Check | Result on a finding |
+|-------|--------------------|
+| Required files present (README, AGENTS, SECURITY, CONTRIBUTING, CHANGELOG, Part 1/Part 2, Skills guide, `managed-settings/README.md`, `agent-hooks/README.md`, ...) | ERROR |
+| No PDF files tracked; nothing tracked under `.kiro/specs/`, `.kiro/hooks/`, `.kiro/settings/` | ERROR |
+| AWS access key IDs (`AKIA` + 16 characters); lines containing `EXAMPLE`/`example` are ignored | ERROR |
+| PEM private-key headers (RSA, EC, DSA, OpenSSH, encrypted, PKCS#8 and PGP private keys) | ERROR |
+| Email addresses (except `example.com`, placeholder and `noreply` addresses, badge URLs and `scheme://user:pass@host` samples) | WARNING |
+| NRIC/FIN-shaped values (except lines documenting a regex and the synthetic `1234567` examples) | WARNING |
+| Broken relative Markdown links in every tracked Markdown file, resolved from the linking file's directory | WARNING |
+| TODO/FIXME markers in documentation, tracked files over 1 MB, root Markdown without an H1 | WARNING |
+
+The secret and PII checks scan the root `*.md` and `*.sh` files, `kiro-docs/`, `.kiro/`, `cdk/`
+(without `node_modules/`, `cdk.out/` and `build/`), `agent-hooks/`, `managed-settings/`, `mdm/`,
+`security-tests/`, `diagrams/` and `.github/`. Two paths are excluded from the private-key, email
+and NRIC checks because they document or assemble detection signatures on purpose:
+`.kiro/skills/pii-detection/` (the skill, its reference patterns and its tests) and
+`agent-hooks/tests/fixtures/`. The AWS key check has no path exclusions.
+
+### CI (`.github/workflows/validate.yml`)
+
+Runs on every pull request to `main`, on pushes to `main` and on manual dispatch, with
+`contents: read` permissions only.
+
+- **validate-docs**: required files, no PDFs, no `.kiro` private config, an inline secret scan
+  (AWS key IDs in `*.md`, `*.ts`, `*.json`, `*.sh`, `*.tsv`; PEM private-key headers in `*.md`,
+  `*.ts`, `*.pem`, `*.key`, `*.tsv`, with the same exclusions), H1 headings, then `./validate-repo.sh`.
+- **validate-cdk**: `npm ci`, `npm audit --audit-level=high` (reported, not blocking), `tsc`,
+  ESLint, the Jest tests and `cdk synth` with cdk-nag `AwsSolutionsChecks`.
+- **validate-skills**: Skill frontmatter and the PII pattern regression tests
+  (`.kiro/skills/pii-detection/tests/patterns.test.sh`).
+- **validate-governance**: agent-hook regression tests, `agent-hooks/SHA256SUMS` verification,
+  managed-settings JSON validity with deny/ask-only effects, hook/agent JSON validity, the MDM
+  lockdown dry-run tests (non-root, no system changes) and `bash -n` on every shell script.
+
 ## Security Best Practices
 
 When contributing to this repository:
 
-- Never commit real credentials, API keys, or PII
-- Use example/placeholder values (e.g., `AKIAIOSFODNN7EXAMPLE`)
-- Run `./validate-repo.sh` before pushing to scan for secrets
+- Never commit real credentials, API keys, account IDs or PII
+- Use example/placeholder values (e.g., `AKIAIOSFODNN7EXAMPLE`, `123456789012`, `example.com`)
+- Run `./validate-repo.sh` before opening a pull request (see [CONTRIBUTING.md](CONTRIBUTING.md))
 - Follow the MAS TRM guidelines documented in this repo
 - All CDK changes must pass `cdk-nag` AwsSolutionsChecks
-
-## Supported Versions
-
-| Version | Supported |
-|---------|-----------|
-| 1.5.x   | Yes       |
-| < 1.5   | No        |

@@ -18,6 +18,18 @@ cdk/*.js
 !cdk/jest.config.js
 cdk/*.d.ts
 
+# Secrets and key material (never commit; use placeholders, see SECURITY.md)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local agent / tool state
+.claude/
+
 # macOS
 .DS_Store
 
@@ -26,6 +38,14 @@ cdk/*.d.ts
 *.swo
 *~
 .vscode/
+.idea/
+
+# Python (diagrams/generate_diagrams.py)
+__pycache__/
+.venv/
+
+# Test coverage output
+coverage/
 
 # Logs
 *.log

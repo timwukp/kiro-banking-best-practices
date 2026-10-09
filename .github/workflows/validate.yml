@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,19 +14,24 @@ jobs:
   validate-docs:
     name: Validate Documentation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Check required files exist
         run: |
           ERRORS=0
           for file in .gitignore LICENSE README.md CHANGELOG.md CONTRIBUTING.md \
+            AGENTS.md QUICK-REFERENCE.md \
             Kiro-Agentic-SDLC-Banking-Best-Practices.md \
             Kiro-Banking-Best-Practices-Part2.md \
             Banking-Skills-Development-Guide.md \
-            CLAUDE.md SECURITY.md; do
+            CLAUDE.md SECURITY.md \
+            managed-settings/README.md agent-hooks/README.md; do
             if [ ! -f "$file" ]; then
               echo "::error::Required file missing: $file"
               ERRORS=$((ERRORS + 1))
@@ -50,15 +56,22 @@ jobs:
       - name: Scan for secrets
         run: |
           ERRORS=0
-          # AWS Access Keys
-          if grep -r -E 'AKIA[0-9A-Z]{16}' --include='*.md' --include='*.ts' --include='*.json' . | grep -v 'EXAMPLE' | grep -v 'example' | grep -v 'node_modules'; then
+          # AWS access key IDs (lines containing EXAMPLE/example are the documented placeholder).
+          # Only file:line is printed, so a leaked key does not end up in the CI log.
+          AKIA_HITS="$(grep -r -n -E 'AKIA[0-9A-Z]{16}' \
+              --include='*.md' --include='*.ts' --include='*.json' --include='*.sh' --include='*.tsv' . \
+            | grep -v 'EXAMPLE' | grep -v 'example' | grep -v 'node_modules' || true)"
+          if [ -n "$AKIA_HITS" ]; then
+            echo "$AKIA_HITS" | cut -d: -f1-2
             echo "::error::Potential AWS access key detected"
             ERRORS=$((ERRORS + 1))
           fi
-          # Private keys
-          # Private keys (exclude the pii-detection skill, which documents the detection signature itself)
-          if grep -r -l 'BEGIN.*PRIVATE KEY' --include='*.md' --include='*.ts' --include='*.pem' . \
-             | grep -v '.kiro/skills/pii-detection/'; then
+          # Private keys (exclude the pii-detection skill and its tests, which document the
+          # detection signature itself, and the agent-hooks test fixtures)
+          if grep -r -l 'BEGIN.*PRIVATE KEY' \
+               --include='*.md' --include='*.ts' --include='*.pem' --include='*.key' --include='*.tsv' . \
+             | grep -v '.kiro/skills/pii-detection/' | grep -v 'agent-hooks/tests/fixtures/' \
+             | grep -v 'node_modules'; then
             echo "::error::Private key material detected"
             ERRORS=$((ERRORS + 1))
           fi
@@ -72,18 +85,24 @@ jobs:
             fi
           done
 
+      - name: Run repository validator (read-only)
+        run: ./validate-repo.sh
+
   validate-cdk:
     name: Validate CDK
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: cdk/package-lock.json
 
@@ -109,10 +128,11 @@ jobs:
 
       - name: Run CDK tests
         working-directory: cdk
-        run: npx jest --passWithNoTests
+        run: npx jest
 
       - name: CDK synth (validates all stacks + CDK Nag)
         working-directory: cdk
+        # cdk.json "build" compiles with tsc before synth; the app runs from build/.
         run: npx cdk synth --context env=dev 2>&1
         env:
           CDK_DEFAULT_ACCOUNT: '000000000000'
@@ -121,10 +141,13 @@ jobs:
   validate-skills:
     name: Validate Kiro Skills
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Check skill structure
         run: |
@@ -152,4 +175,75 @@ jobs:
               echo "::warning::Skill name '$YAML_NAME' doesn't match folder '$skill_name'"
             fi
           done
+          exit $ERRORS
+
+      - name: PII pattern regression tests (grep -E + perl PCRE)
+        run: bash .kiro/skills/pii-detection/tests/patterns.test.sh
+
+  validate-governance:
+    name: Validate Governance (hooks, managed settings, MDM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Ensure jq is available
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+          jq --version
+
+      - name: Agent hook regression tests
+        run: bash agent-hooks/tests/run-tests.sh
+
+      - name: Verify agent-hooks/SHA256SUMS
+        working-directory: agent-hooks
+        run: sha256sum -c SHA256SUMS
+
+      - name: Validate managed-settings JSON (parse + deny/ask effects only)
+        run: |
+          ERRORS=0
+          for f in managed-settings/*.json; do
+            if ! jq empty "$f"; then
+              echo "::error file=$f::invalid JSON"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          # Admin policy files: an "allow" (or any other) effect makes Kiro reject the whole file.
+          for f in managed-settings/managed-settings*.json; do
+            if ! jq -e '[.rules[].effect] | all(. == "deny" or . == "ask")' "$f" >/dev/null; then
+              echo "::error file=$f::rules may only use effect \"deny\" or \"ask\""
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          exit $ERRORS
+
+      - name: Validate agent-hooks JSON
+        run: |
+          ERRORS=0
+          for f in agent-hooks/*.json agent-hooks/hooks/*.json; do
+            if ! jq empty "$f"; then
+              echo "::error file=$f::invalid JSON"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          exit $ERRORS
+
+      - name: MDM lockdown dry-run tests (non-root, no system changes)
+        run: bash mdm/tests/test-lockdown.sh
+
+      - name: Shell syntax check (bash -n)
+        run: |
+          ERRORS=0
+          while IFS= read -r f; do
+            if ! bash -n "$f"; then
+              echo "::error file=$f::bash syntax error"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done < <(git ls-files '*.sh')
           exit $ERRORS

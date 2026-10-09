@@ -29,8 +29,19 @@ MAS-aligned best practices for deploying **AWS Kiro** in Singapore **banking** S
 - Agent **hooks live in top-level `agent-hooks/`**, not `.kiro/hooks/`; admin policy files live in `managed-settings/`.
 - **Admin rules (`managed-settings*.json`) use only `deny` or `ask`** and only the documented fields; an `allow` rule or unknown field makes Kiro reject the whole file and deny all tool calls.
 - **Kiro claims:** cite the official kiro.dev page with a verification date; where pages conflict, follow the newer one and note the conflict. Do not call a control "tamper-proof" or "fail-closed" unless Kiro documents it as such.
-- **Validate before pushing:** `./validate-repo.sh` (expect 0 errors) and `bash agent-hooks/tests/run-tests.sh` (expect `FAIL=0`).
+- **Changes go through a pull request** from a feature branch; never push to `main`. CI (`.github/workflows/validate.yml`) must pass. Run the commands below first.
 - Default to **least privilege**.
+
+## Commands (run from the repo root; CI runs the same)
+| Check | Command | Expect |
+|-------|---------|--------|
+| Repo validator (read-only: required files, secrets/PII, links) | `./validate-repo.sh` | `RESULT: PASSED` (0 errors) |
+| CDK tests / lint / synth | `cd cdk && npm test`; `npm run lint`; `npx cdk synth --context env=dev` | 86 tests pass; lint clean; synth OK (cdk.json builds with `tsc`) |
+| Agent hooks (bash + jq) | `bash agent-hooks/tests/run-tests.sh` | `PASS=98 FAIL=0` |
+| PII skill patterns (grep -E; perl for PCRE) | `bash .kiro/skills/pii-detection/tests/patterns.test.sh` | `PASS=346 FAIL=0` |
+| MDM dry run (non-root, no system changes) | `bash mdm/tests/test-lockdown.sh` | `FAIL=0` |
+| Hook manifest | `(cd agent-hooks && shasum -a 256 -c SHA256SUMS)` | all `OK` |
+| Admin policy effects | `jq -e '[.rules[].effect] \| all(. == "deny" or . == "ask")' managed-settings/managed-settings*.json` | `true` |
 
 ## Hard rules for `cdk/`
 - **cdk-nag** `AwsSolutionsChecks` is enabled by default and every stack must pass it; a suppression needs a written reason.
