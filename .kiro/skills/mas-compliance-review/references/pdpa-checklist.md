@@ -2,6 +2,11 @@
 
 ## When Writing Code That Handles Personal Data
 
+### Accountability
+- [ ] Data protection policies and practices documented and available on request
+- [ ] Data Protection Officer (DPO) designated and contactable
+- [ ] Process in place to receive and respond to complaints
+
 ### Data Collection
 - [ ] Consent obtained before collecting personal data
 - [ ] Purpose of collection clearly stated
@@ -21,12 +26,17 @@
 - [ ] Retention period defined and enforced
 - [ ] Secure deletion when retention expires
 
+### Transfer Limitation (PDPA s26)
+- [ ] Personal data transferred outside Singapore receives a standard of protection comparable to the PDPA: legally enforceable obligations (for example, a contract specifying the recipient countries, or binding corporate rules), specified certifications (APEC CBPR / Global CBPR; PRP for data intermediaries), or another deemed-compliance case
+- [ ] Transfers made by data intermediaries and cloud providers are covered (for example, an AI coding service that processes prompts or code in another region); the organisation remains responsible
+
 ### Data Protection
 - [ ] No PII in logs, error messages, or debug output
 - [ ] PII masked in displays (NRIC: S****567D)
 - [ ] SQL injection prevention (parameterized queries)
 - [ ] Input validation on all user inputs
 - [ ] Output encoding to prevent XSS
+- [ ] NRIC numbers not used as an authenticator or default password (PDPC/CSA advisory: organisations to cease using NRIC numbers for authentication by 31 Dec 2026)
 
 ### Singapore-Specific PII Patterns
 
@@ -40,7 +50,10 @@
 | Bank Account | `\d{10,12}` | Block/mask |
 
 ### Data Breach Notification
-- Assess within 30 calendar days if breach is notifiable
-- Notify PDPC within 3 calendar days of assessment (if notifiable)
-- Notifiable if: significant harm likely OR affects 500+ individuals
-- Notify affected individuals as soon as practicable
+Source: PDPC Advisory Guidelines on Key Concepts in the PDPA, chapter 20.
+- Assess whether a breach is notifiable expeditiously; PDPC expects the assessment to be completed generally within 30 calendar days
+- Notifiable if either test is met (two separate tests):
+  - **Significant harm:** the breach results in, or is likely to result in, significant harm to affected individuals (prescribed classes of personal data in the PDP (Notification of Data Breaches) Regulations 2021)
+  - **Significant scale:** the breach affects 500 or more individuals
+- Notify PDPC as soon as practicable, and no later than 3 calendar days after determining that the breach is notifiable
+- Notify affected individuals as soon as practicable, at the same time as or after notifying PDPC (required where the breach is likely to result in significant harm to them)

@@ -4,7 +4,7 @@ description: Detect and flag Personally Identifiable Information (PII) in code, 
 metadata:
   author: Data Protection Team
   version: 1.0.0
-  regulations: PDPA 2012, MAS TRM Section 11
+  regulations: PDPA 2012, MAS TRM 11.1 (Data Security)
 ---
 
 # PII Detection Skill

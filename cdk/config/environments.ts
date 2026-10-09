@@ -49,6 +49,6 @@ export const prodConfig: KiroBankingConfig = {
     'com.amazonaws.ap-southeast-1.bedrock-runtime',
   ],
   workspaceBundleId: 'wsb-gm4b5tx0y', // PowerPro bundle - update with your actual bundle ID
-  cloudTrailRetentionDays: 2555, // ~7 years for MAS compliance
+  cloudTrailRetentionDays: 2555, // ~7 years; set per your record-keeping obligations (commonly 5-7 years)
   enableCdkNag: true,
 };

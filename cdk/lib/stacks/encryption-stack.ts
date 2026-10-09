@@ -12,7 +12,7 @@ export interface EncryptionStackProps extends cdk.StackProps {
 /**
  * KMS Customer-Managed Keys for Kiro Banking Environment.
  *
- * MAS TRM Section 10 (Cryptography):
+ * MAS TRM Section 10 (Cryptography), 10.2 (Cryptographic Key Management):
  * - Customer-managed encryption keys for data at rest
  * - Key rotation enabled
  * - Strict key policies following least privilege
@@ -30,7 +30,7 @@ export class EncryptionStack extends cdk.Stack {
     // --- KMS Key: Audit Logs (CloudTrail, S3 log bucket) ---
     this.auditKey = new kms.Key(this, 'AuditKey', {
       alias: `kiro-banking-audit-${config.environment}`,
-      description: 'Encrypts CloudTrail logs and audit data (MAS TRM Section 15)',
+      description: 'Encrypts CloudTrail logs and audit data (MAS TRM 10.2, 12.2)',
       enableKeyRotation: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       pendingWindow: cdk.Duration.days(30),
@@ -79,7 +79,7 @@ export class EncryptionStack extends cdk.Stack {
     // --- KMS Key: WorkSpaces Encryption ---
     this.workspacesKey = new kms.Key(this, 'WorkspacesKey', {
       alias: `kiro-banking-workspaces-${config.environment}`,
-      description: 'Encrypts WorkSpaces root and user volumes (MAS TRM Section 8.5)',
+      description: 'Encrypts WorkSpaces root and user volumes (MAS TRM 11.1, 11.4)',
       enableKeyRotation: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       pendingWindow: cdk.Duration.days(30),

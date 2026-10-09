@@ -26,7 +26,7 @@ const env: cdk.Environment = {
 const encryptionStack = new EncryptionStack(app, `KiroBanking-Encryption-${config.environment}`, {
   env,
   config,
-  description: 'KMS customer-managed keys for Kiro banking environment (MAS TRM Section 10)',
+  description: 'KMS customer-managed keys for Kiro banking environment (MAS TRM 10.2 Cryptographic Key Management)',
 });
 
 // --- Network Stack (VPC + PrivateLink) ---
@@ -41,7 +41,7 @@ const monitoringStack = new MonitoringStack(app, `KiroBanking-Monitoring-${confi
   env,
   config,
   kmsKey: encryptionStack.auditKey,
-  description: 'CloudTrail audit logging and CloudWatch monitoring (MAS TRM Section 15)',
+  description: 'CloudTrail audit logging and CloudWatch monitoring (MAS TRM 12.2 Cyber Event Monitoring and Detection)',
 });
 monitoringStack.addDependency(encryptionStack);
 
@@ -52,11 +52,11 @@ const complianceStack = new ComplianceStack(app, `KiroBanking-Compliance-${confi
   description: 'AWS Config rules for MAS TRM continuous compliance monitoring',
 });
 
-// --- Backup Stack (AWS Backup for business continuity) ---
+// --- Backup Stack (AWS Backup for system backup and recovery) ---
 const backupStack = new BackupStack(app, `KiroBanking-Backup-${config.environment}`, {
   env,
   config,
-  description: 'AWS Backup vault and plan for business continuity (MAS TRM Section 8)',
+  description: 'AWS Backup vault and plan for system backup and recovery (MAS TRM Section 8 IT Resilience, 8.4)',
 });
 
 // Apply tags to all resources

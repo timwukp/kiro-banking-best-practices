@@ -1,11 +1,11 @@
 # AWS Kiro Banking Best Practices
-## MAS-Compliant Implementation Guide for Singapore Financial Institutions
+## MAS-Aligned Implementation Guide for Singapore Financial Institutions
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![MAS Compliant](https://img.shields.io/badge/MAS-TRM%20Guidelines-blue.svg)](https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines)
+[![MAS TRM aligned](https://img.shields.io/badge/MAS%20TRM-aligned-blue)](https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines)
 [![AWS](https://img.shields.io/badge/AWS-Kiro-orange.svg)](https://kiro.dev)
 
-> Security-first guidance for implementing AWS Kiro in banking SDLC environments while maintaining full compliance with Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines.
+> Security-first guidance for implementing AWS Kiro in banking SDLC environments, designed to support alignment with the Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines. Each institution remains responsible for its own compliance assessment.
 
 ---
 
@@ -26,22 +26,22 @@
 
 ## Overview
 
-This repository provides comprehensive best practices for banking development teams implementing AWS Kiro (AI-powered development assistant) in Software Development Life Cycle (SDLC) environments. All guidance is designed to meet MAS regulatory requirements for financial institutions operating in Singapore.
+This repository provides comprehensive best practices for banking development teams implementing AWS Kiro (AI-powered development assistant) in Software Development Life Cycle (SDLC) environments. All guidance is designed to support alignment with MAS regulatory requirements for financial institutions operating in Singapore; each institution remains responsible for its own compliance assessment.
 
 ### What is AWS Kiro?
 
-AWS Kiro is an AI-powered IDE and development assistant that helps developers write, debug, and optimize code. For banking environments, special security controls are required to ensure compliance with financial services regulations.
+AWS Kiro is an AI-powered IDE and development assistant that helps developers write, debug, and optimize code. For banking environments, special security controls are needed to support compliance with financial services regulations.
 
 ### Why This Guide?
 
 Financial institutions face unique challenges when adopting AI development tools:
-- **Regulatory Compliance** - Must meet MAS Technology Risk Management Guidelines
+- **Regulatory Alignment** - Must align with the MAS Technology Risk Management Guidelines and comply with binding MAS Notices (for banks, Notices FSM-N05 and FSM-N06)
 - **Data Protection** - Sensitive code and data must remain within controlled environments
 - **Access Control** - Enterprise identity management and MFA requirements
 - **Audit Requirements** - Complete audit trails for all AI-assisted development activities
 - **Network Security** - Private connectivity without internet exposure
 
-This guide addresses all these challenges with practical, tested implementations.
+This guide addresses these challenges with practical reference implementations (validated by unit tests, cdk-nag and synth; not a substitute for your own testing).
 
 ---
 
@@ -57,7 +57,7 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 | Secure the MCP config file (`mcp.json`) | [`kiro-docs/mcp-security.md`](kiro-docs/mcp-security.md) |
 | Set up auth, network & VDI (Sections 1–4) | [`Kiro-Agentic-SDLC-Banking-Best-Practices.md`](Kiro-Agentic-SDLC-Banking-Best-Practices.md) |
 | Go deeper: MCP, SDLC, PDPA, FEAT (Sections 5–14) | [`Kiro-Banking-Best-Practices-Part2.md`](Kiro-Banking-Best-Practices-Part2.md) |
-| Build a MAS-compliant Kiro Skill | [`Banking-Skills-Development-Guide.md`](Banking-Skills-Development-Guide.md) |
+| Build a MAS-aligned Kiro Skill | [`Banking-Skills-Development-Guide.md`](Banking-Skills-Development-Guide.md) |
 | Use the reference locked-down agent + hooks | [`agent-hooks/`](agent-hooks/) |
 | Deploy the AWS infrastructure | [`cdk/`](cdk/) |
 | Check MAS TRM coverage | [Compliance Framework](#compliance-framework) |
@@ -124,26 +124,26 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 | **[QUICK-REFERENCE.md](QUICK-REFERENCE.md)** | Quick reference card with checklists | ✅ Complete |
 | **[Kiro-Agentic-SDLC-Banking-Best-Practices.md](Kiro-Agentic-SDLC-Banking-Best-Practices.md)** | Comprehensive implementation guide (Sections 1-4) | ✅ Complete |
 | **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-14) incl. PDPA, Outsourcing, AI/ML, ABS | ✅ Complete |
-| **[Banking-Skills-Development-Guide.md](Banking-Skills-Development-Guide.md)** | How to build MAS-compliant Kiro Skills for banking | ✅ Complete |
+| **[Banking-Skills-Development-Guide.md](Banking-Skills-Development-Guide.md)** | How to build MAS-aligned Kiro Skills for banking | ✅ Complete |
 | **[kiro-docs/agent-runtime-governance.md](kiro-docs/agent-runtime-governance.md)** | Agent runtime governance: tool permissions, hooks, tamper-evident audit | ✅ Complete |
 | **[kiro-docs/mdm-endpoint-enforcement.md](kiro-docs/mdm-endpoint-enforcement.md)** | MDM-managed, immutable, self-healing global hooks/steering/agent across clients | ✅ Complete |
 | **[kiro-docs/mdm-test-evidence.md](kiro-docs/mdm-test-evidence.md)** | Sanitized Windows/macOS/Linux lockdown test results | ✅ Complete |
 | **[kiro-docs/chaos-pentest-evidence.md](kiro-docs/chaos-pentest-evidence.md)** | Chaos/pentest: non-privileged human + agent vs controls (findings + recommendations) | ✅ Complete |
 | **[SECURITY.md](SECURITY.md)** | Security vulnerability reporting policy | ✅ Complete |
 
-### Kiro Skills (Working Implementations)
+### Kiro Skills (Reference Implementations)
 
 | Skill | Description | MAS Reference |
 |-------|-------------|---------------|
-| **[.kiro/skills/mas-compliance-review/](.kiro/skills/mas-compliance-review/)** | Automated MAS TRM + PDPA compliance checking | TRM 9, 10, 11, 15 + PDPA |
+| **[.kiro/skills/mas-compliance-review/](.kiro/skills/mas-compliance-review/)** | Automated MAS TRM + PDPA compliance checking | TRM 9, 10, 11, 12.2 + PDPA |
 | **[.kiro/skills/pii-detection/](.kiro/skills/pii-detection/)** | Singapore-specific PII detection and masking | PDPA + TRM 11.1 |
-| **[.kiro/skills/banking-code-review/](.kiro/skills/banking-code-review/)** | Banking security code review with checklists | TRM 6, 9, 10, 11 + AIRG |
+| **[.kiro/skills/banking-code-review/](.kiro/skills/banking-code-review/)** | Banking security code review with checklists | TRM 6.1, 9, 10, 11, 12.2 + MAS AI Risk Management Guidelines (2026) |
 
 ### Infrastructure as Code
 
 | Document | Description |
 |----------|-------------|
-| **[cdk/](cdk/)** | AWS CDK (TypeScript) modules for MAS-compliant infrastructure |
+| **[cdk/](cdk/)** | AWS CDK (TypeScript) modules for MAS-aligned infrastructure |
 | **[cdk/README.md](cdk/README.md)** | CDK deployment guide with architecture diagram |
 
 ### Steering Files (Sample Kiro Configuration)
@@ -166,7 +166,7 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 |---------|-------------|
 | **[diagrams/architecture-option-a.png](diagrams/architecture-option-a.png)** | Option A: Via IAM Identity Center |
 | **[diagrams/architecture-option-b.png](diagrams/architecture-option-b.png)** | Option B: Direct IdP Federation |
-| **[diagrams/security-layers.png](diagrams/security-layers.png)** | MAS TRM 5-layer security model |
+| **[diagrams/security-layers.png](diagrams/security-layers.png)** | This guide's 5-layer security model |
 
 ### Technical Reference (Kiro Platform Docs)
 
@@ -187,6 +187,9 @@ Local snapshots of Kiro platform documentation for offline/air-gapped environmen
 - **TRM Guidelines 18 January 2021.pdf**
 - **Risk Management Guidelines_Insurance Core Activities.pdf**
 - **Monograph - A guide for senior executives - Final revised in April 2013.pdf**
+- **[MAS Notice FSM-N05](https://www.mas.gov.sg/regulation/notices/notice-fsm-n05) (Technology Risk Management) and [MAS Notice FSM-N06](https://www.mas.gov.sg/regulation/notices/notice-fsm-n06) (Cyber Hygiene)** — binding for banks from 10 May 2024 (replaced Notices 644 and 655); other sectors: see [Applicability](#applicability-across-mas-regulated-financial-institutions)
+- **[MAS Notice 658](https://www.mas.gov.sg/regulation/notices/notice-658) + [Guidelines on Outsourcing (Banks)](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-outsourcing-banks)** for banks, and **[Guidelines on Outsourcing (Financial Institutions other than Banks)](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-outsourcing-financial-institutions-other-than-banks)** for other FIs — effective 11 Dec 2024; the earlier Guidelines on Outsourcing (2016, revised 2018) are cancelled
+- **[MAS Guidelines on Artificial Intelligence Risk Management](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-artificial-intelligence-risk-management-for-financial-institutions)** — published 7 Oct 2026, effective 7 Oct 2027
 
 ---
 
@@ -328,41 +331,72 @@ Both architectures share the same 5-layer security model:
 
 | Regulation | Scope | Document Reference |
 |------------|-------|-------------------|
-| **MAS TRM Guidelines** (Jan 2021) | Technology risk management (15 sections) | Part 1 & Part 2 |
+| **MAS TRM Guidelines** (Jan 2021) | Technology risk management (15 sections); apply to all MAS-regulated FIs | Part 1 & Part 2 |
+| **MAS Notice FSM-N05** (Technology Risk Management; banks; effective 10 May 2024) | Binding: unscheduled downtime of each critical system ≤ 4 hours in any 12 months and RTO ≤ 4 hours (paras 5–6); notify MAS within 1 hour of discovery of a relevant incident (para 7); root-cause and impact report within 14 days (para 8); protect customer information (para 9) | Part 2, Section 10 |
+| **MAS Notice FSM-N06** (Cyber Hygiene; banks; effective 10 May 2024) | Binding: secure administrative accounts, security patching, written security standards, network perimeter controls, malware protection, MFA for administrative accounts on critical systems and for internet access to customer information | Part 1, Sections 2–4 |
 | **Singapore PDPA** (2012, amended 2020) | Personal data protection | Part 2, Section 11 |
-| **MAS Outsourcing Guidelines** (2018) | Third-party service risk management | Part 2, Section 12 |
-| **MAS FEAT Principles** | AI/ML fairness, ethics, accountability, transparency | Part 2, Section 13 |
+| **MAS Notice 658** + **Guidelines on Outsourcing (Banks)** for banks; **Guidelines on Outsourcing (FIs other than Banks)** for other FIs (all effective 11 Dec 2024) | Outsourcing and third-party service risk management; replace the cancelled 2016/2018 Guidelines on Outsourcing | Part 2, Section 12 |
+| **MAS Guidelines on Artificial Intelligence Risk Management** (published 7 Oct 2026; effective 7 Oct 2027) | AI governance and life-cycle risk management for all AI, including generative AI and AI agents | Part 2, Section 13 |
+| **MAS FEAT Principles** (2018) | Fairness, ethics, accountability, transparency in AI and data analytics (applied by analogy to AI-assisted development) | Part 2, Section 13 |
 | **ABS Cloud Computing Guide** | Industry cloud security standards | Part 2, Section 14 |
 | **ABS Penetration Testing Guidelines** | Security assessment standards | Part 2, Section 14.2 |
+
+> **Proposed changes:** MAS [Consultation Paper P012-2026](https://www.mas.gov.sg/publications/consultations/2026/consultation-paper-on-proposed-amendments-to-notices-on-technology-risk-management) (10 Jun 2026; closed 31 Jul 2026) proposes amendments to the TRM notices (e.g. IT asset inventories covering open-source and third-party components, IT supply-chain and AI risk assessment, immutable or offline backups); the 1-hour, 14-day and 4-hour requirements are unchanged in the proposal.
+
+### Applicability Across MAS-Regulated Financial Institutions
+
+The MAS TRM Guidelines apply to all MAS-regulated financial institutions, including banks, insurers, insurance brokers, capital markets FIs, financial advisers, trust companies and payment institutions. The binding technology risk and cyber hygiene requirements sit in sector-specific notices:
+
+| Sector | TRM notice | Cyber Hygiene notice |
+|--------|------------|----------------------|
+| Banks | FSM-N05 | FSM-N06 |
+| Merchant banks | FSM-N11 | FSM-N12 |
+| Insurers | FSM-N03 | FSM-N04 |
+| Insurance brokers | FSM-N19 | FSM-N20 |
+| Capital markets FIs | FSM-N21 | FSM-N22 |
+| Licensed financial advisers | FSM-N23 | FSM-N24 |
+| Designated payment systems and digital payment token service providers | FSM-N13 | FSM-N14 |
+| Credit and charge card issuers | FSM-N07 | FSM-N08 |
+| Finance companies | FSM-N09 | FSM-N10 |
+| Trust companies | FSM-N25 | FSM-N26 |
+
+- These notices replaced the earlier sector notices (e.g. Notices 644 and 655 for banks), which were cancelled with effect from 10 May 2024. Source: [MAS Cyber Security – Change of Notice References](https://www.mas.gov.sg/regulation/cyber-security).
+- Only the text of FSM-N05 and FSM-N06 was verified verbatim for this guide; verify the wording of other sectors' notices before relying on them. Major and standard payment institutions are not covered by a TRM notice in this map, but the TRM Guidelines still apply.
+- This guide's reference implementation is banking-focused (FSM-N05, FSM-N06, Notice 658). Other sectors should map the controls through their own notices and outsourcing guidelines.
 
 ### MAS TRM Guidelines Mapping
 
 | MAS Section | Control Area | Implementation | Document Reference |
 |-------------|--------------|----------------|-------------------|
-| **3.1** | Governance & Oversight | IAM IDC + Enterprise IdP | Section 2 |
-| **5.1-5.2** | IT Project Mgmt & Security-by-Design | Supervised mode + Skills | Section 6 |
-| **9.1** | Access Control | MFA + Session Management | Section 2.1.3 |
-| **9.3** | Remote Access Security | VPC + PrivateLink | Section 3 |
-| **10** | Cryptography | TLS 1.2+ + KMS | Section 7 |
+| **3.4** | Management of Third Party Services | Kiro, MCP servers and model providers assessed as third-party services; outsourcing assessment (Notice 658 / Guidelines on Outsourcing) | Section 5, Section 12 |
+| **5.4** | SDLC and Security-by-Design | Supervised mode + Skills | Section 6 |
+| **6.1, 6.3** | Secure Coding and Source Code Review; DevSecOps | Human review and testing of AI-generated and third-party code before integration (6.1.3), SAST/DAST (Annex A), segregation of duties and human approval before merge | Section 6 |
+| **9.1** | User Access Management | IAM IDC + Enterprise IdP; MFA + Session Management | Section 2, Section 2.1.3 |
+| **9.2** | Privileged Access Management | MFA for administrative access (banks: Notice FSM-N06 paras 4.1, 4.6) | Section 2.1.3 |
+| **9.3** | Remote Access Management | WorkSpaces VDI over VPC + PrivateLink | Section 3, Section 4 |
+| **10.1, 10.2** | Cryptographic Algorithm and Protocol; Key Management | TLS 1.2+; KMS customer-managed keys with rotation | Section 7 |
 | **11.1** | Data Security | DLP + Encryption + PDPA | Section 4.1.3, Section 11 |
 | **11.2** | Network Security | VPC Endpoints + Security Groups | Section 3.2 |
-| **12.1-12.3** | Cyber Security Operations | CloudWatch + monitoring | Section 8 |
-| **13.1-13.4** | Security Assessment | Annual VA/PT of Kiro environments | Section 14.2 |
-| **15** | IT Audit | CloudTrail + Monitoring | Section 8 |
+| **11.3, 11.4** | System Security; Virtualisation Security | Hardened WorkSpaces images + GPO | Section 4 |
+| **12.2** | Cyber Event Monitoring and Detection | CloudTrail + CloudWatch monitoring | Section 8 |
+| **12.3** | Cyber Incident Response and Management | Escalation matrix + MAS notification (banks: Notice FSM-N05 paras 7–8) | Section 10 |
+| **13.1, 13.2, 13.4** | Vulnerability Assessment; Penetration Testing; Adversarial Attack Simulation | Annual VA/PT of Kiro environments; red-team exercises | Section 14.2, Section 14.3 |
+| **15.1** | IT Audit | Independent IT audit uses the CloudTrail audit trail as evidence | Section 8 |
 
 ### Key Compliance Controls
 
 - ✅ **Zero Trust Architecture** - No internet-facing endpoints, all traffic through VPC PrivateLink
-- ✅ **MFA Enforcement** - Required for all user access via Enterprise IdP
+- ✅ **MFA Enforcement** - Required for all user access via Enterprise IdP (TRM 9.1–9.2; banks: Notice FSM-N06 para 4.6)
 - ✅ **Least Privilege** - IAM policies grant minimum required permissions
 - ✅ **Encryption** - Data encrypted at rest (KMS) and in transit (TLS 1.2+)
-- ✅ **Audit Trails** - CloudTrail logging with 90-day minimum retention
+- ✅ **Audit Trails** - CloudTrail logging (TRM 12.2); 90-day minimum retention is an example institutional policy (not prescribed by MAS TRM)
 - ✅ **Data Location Governance** - Kiro operates from supported profile regions (us-east-1, eu-central-1); prompt logs and user activity reports are stored in the profile region per AWS requirements. MAS TRM does not mandate data localisation — residency preferences are customer-driven. For organizations requiring regional log copies, S3 Cross-Region Replication (CRR) to ap-southeast-1 is available as a complementary control
 - ✅ **DLP Controls** - Prevent code exfiltration and credential exposure
 - ✅ **MCP Governance** - Centrally managed whitelist, no developer modifications
-- ✅ **PDPA Compliance** - Data classification, DLP rules for personal data, breach notification
-- ✅ **AI Governance** - FEAT principles applied, human accountability for AI-generated code
-- ✅ **Outsourcing Risk** - Due diligence, exit strategy, concentration risk management
+- ✅ **PDPA Alignment** - Data classification, DLP rules for personal data, breach notification
+- ✅ **AI Governance** - MAS AI Risk Management Guidelines (2026): assess Kiro's materiality (coding assistants are not among the basic-tier examples); FEAT principles applied by analogy; human accountability for AI-generated code
+- ✅ **Outsourcing Risk** - Materiality assessment, due diligence, exit strategy, concentration risk management (TRM 3.4; Notice 658 and Guidelines on Outsourcing)
+- ✅ **Incident Notification** - Escalation supports notifying MAS within 1 hour of discovery of a relevant incident and a root-cause report within 14 days (banks: Notice FSM-N05 paras 7–8)
 
 ---
 
@@ -441,7 +475,14 @@ This documentation is provided for informational and educational purposes only. 
 ### MAS Guidelines
 - [Technology Risk Management Guidelines (Jan 2021)](https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines)
 - [MAS Framework for Impact and Risk Assessment](https://www.mas.gov.sg/)
-- [MAS Guidelines on Outsourcing](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-outsourcing)
+- [MAS Notice FSM-N05 on Technology Risk Management](https://www.mas.gov.sg/regulation/notices/notice-fsm-n05) — banks
+- [MAS Notice FSM-N06 on Cyber Hygiene](https://www.mas.gov.sg/regulation/notices/notice-fsm-n06) — banks
+- [MAS Cyber Security – sector notice references](https://www.mas.gov.sg/regulation/cyber-security)
+- [MAS Consultation Paper P012-2026 on Proposed Amendments to Notices on Technology Risk Management](https://www.mas.gov.sg/publications/consultations/2026/consultation-paper-on-proposed-amendments-to-notices-on-technology-risk-management)
+- [MAS Notice 658 – Management of Outsourced Relevant Services for Banks](https://www.mas.gov.sg/regulation/notices/notice-658)
+- [MAS Guidelines on Outsourcing (Banks)](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-outsourcing-banks)
+- [MAS Guidelines on Outsourcing (Financial Institutions other than Banks)](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-outsourcing-financial-institutions-other-than-banks)
+- [MAS Guidelines on Artificial Intelligence Risk Management](https://www.mas.gov.sg/regulation/guidelines/guidelines-on-artificial-intelligence-risk-management-for-financial-institutions) — published 7 Oct 2026, effective 7 Oct 2027
 - [MAS FEAT Principles (AI/ML)](https://www.mas.gov.sg/publications/monographs-or-information-paper/2018/feat)
 
 ### Singapore Data Protection

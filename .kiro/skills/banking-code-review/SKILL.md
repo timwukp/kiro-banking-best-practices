@@ -4,7 +4,7 @@ description: Conduct code reviews following Singapore banking security standards
 metadata:
   author: Development Standards Team
   version: 1.0.0
-  regulations: MAS TRM, PDPA, MAS AIRG
+  regulations: MAS TRM, PDPA, MAS Guidelines on Artificial Intelligence Risk Management
 ---
 
 # Banking Code Review Skill
@@ -25,15 +25,15 @@ Structured code review process for Singapore banking applications, ensuring secu
 
 When reviewing code, check each category in order:
 
-### 1. Security (MAS TRM Section 10) - CRITICAL
+### 1. Secure Coding (MAS TRM 6.1) - CRITICAL
 
 - [ ] No hardcoded credentials, API keys, or secrets
-- [ ] TLS 1.2+ for all network connections (TLS 1.3 recommended)
+- [ ] TLS 1.2+ for all network connections (TLS 1.3 recommended) (TRM 10.1)
 - [ ] Input validation on ALL user inputs (whitelist approach)
 - [ ] SQL injection prevention (parameterized queries only)
 - [ ] XSS prevention (output encoding/escaping)
 - [ ] CSRF protection on state-changing endpoints
-- [ ] No use of deprecated crypto (MD5, SHA-1, DES, RC4)
+- [ ] No use of deprecated crypto (MD5, SHA-1, DES, RC4) (TRM 10.1)
 - [ ] Secure random number generation for tokens/keys
 
 ### 2. Access Control (MAS TRM Section 9)
@@ -41,11 +41,13 @@ When reviewing code, check each category in order:
 - [ ] Authentication required for all sensitive endpoints
 - [ ] Authorization checks at both API and data layer
 - [ ] No Insecure Direct Object References (IDOR)
-- [ ] Session timeout configured (15 min for customer-facing)
-- [ ] Failed login lockout (3 attempts max)
-- [ ] Privilege escalation prevention
+- [ ] Session timeout configured (example institutional policy, not prescribed by MAS TRM: 15 min for customer-facing)
+- [ ] Failed login lockout (example institutional policy, not prescribed by MAS TRM: 3 attempts max)
+- [ ] Privilege escalation prevention (TRM 9.2)
+- [ ] Customer-facing authentication uses MFA / transaction signing where required (TRM 14.2)
+- [ ] NRIC numbers not used as an authenticator or default password (PDPC/CSA advisory: cease by 31 Dec 2026)
 
-### 3. Data Protection (MAS TRM Section 11 + PDPA)
+### 3. Data Protection (MAS TRM 11.1 + PDPA)
 
 - [ ] PII encrypted at rest (KMS) and in transit (TLS)
 - [ ] No PII in logs, error messages, or stack traces
@@ -54,7 +56,9 @@ When reviewing code, check each category in order:
 - [ ] PDPA consent checks before data collection
 - [ ] Data minimization (collect only what's needed)
 
-### 4. Audit & Logging (MAS TRM Section 15)
+### 4. Audit & Logging (MAS TRM 12.2)
+
+The logs also serve as evidence for the independent IT audit function (TRM 15.1).
 
 - [ ] All financial transactions logged with:
   - Timestamp, user ID, action, resource, outcome
@@ -71,7 +75,7 @@ When reviewing code, check each category in order:
 - [ ] Circuit breaker pattern for downstream calls
 - [ ] Retry logic with exponential backoff
 
-### 6. AI-Generated Code Quality (MAS AIRG)
+### 6. AI-Generated Code Quality (MAS TRM 6.1, 6.3; MAS Guidelines on Artificial Intelligence Risk Management)
 
 - [ ] AI-generated code reviewed by human developer
 - [ ] No bias in financial decision logic
@@ -129,7 +133,7 @@ db_creds = json.loads(secret.get_secret_value(SecretId='/banking/db')['SecretStr
 Code can be approved when:
 - All CRITICAL security checks passed
 - No unresolved high-severity findings
-- MAS compliance validated
+- MAS TRM alignment checks passed (see the checklist above)
 - Minimum 2 human reviewers approved
 - All automated tests passing
 - PII detection scan clean

@@ -45,20 +45,20 @@
 - [ ] Circuit breakers for downstream calls
 
 #### Session Management
-- [ ] Session timeout: 15 min for customer-facing, 2 hours for internal tools
+- [ ] Session timeout: 15 min for customer-facing, 2 hours for internal tools (example institutional policy, not prescribed by MAS TRM)
 - [ ] Session invalidation on logout
 - [ ] Secure cookie flags: HttpOnly, Secure, SameSite
 - [ ] CSRF protection on state-changing endpoints
 
-#### Audit Trail
+#### Audit Trail (MAS TRM 12.2)
 - [ ] Financial transactions logged with: timestamp, user, action, resource, outcome
 - [ ] Log integrity protected (append-only)
-- [ ] Minimum 90-day log retention
+- [ ] Minimum 90-day log retention (example institutional policy, not prescribed by MAS TRM)
 - [ ] No sensitive data in logs
 
 ### Priority 4: Code Quality
 
-#### AI-Generated Code (MAS AIRG)
+#### AI-Generated Code (MAS TRM 6.1; MAS Guidelines on Artificial Intelligence Risk Management)
 - [ ] Human reviewer verified AI-generated logic
 - [ ] No bias in financial decision-making (credit scoring, fees, risk)
 - [ ] Automated decisions are explainable
