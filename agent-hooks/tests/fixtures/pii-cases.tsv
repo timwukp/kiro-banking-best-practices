@@ -1,0 +1,19 @@
+# expected_exit<TAB>description<TAB>tool_input JSON. Fake values only; __PEM_BEGIN__ and __GH_TOKEN__ are expanded by run-tests.sh at runtime
+# so that no token-shaped or key-shaped literal is committed.
+2	PEM RSA	{"content":"__PEM_BEGIN__ RSA PRIVATE KEY-----\nMIIEfake\n-----END RSA PRIVATE KEY-----"}
+2	PEM OpenSSH	{"content":"__PEM_BEGIN__ OPENSSH PRIVATE KEY-----"}
+2	PEM generic	{"content":"__PEM_BEGIN__ PRIVATE KEY-----"}
+2	AWS AKIA	{"content":"key=AKIAIOSFODNN7EXAMPLE"}
+2	AWS ASIA	{"content":"ASIAIOSFODNN7EXAMPLE"}
+2	AWS secret	{"content":"AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY"}
+2	GitHub token	{"content":"token __GH_TOKEN__"}
+2	JSON password	{"content":"{\"db_password\": \"plaintext123\"}"}
+2	env password	{"content":"PASSWORD=hunter2hunter2"}
+2	NRIC	{"content":"customer S1234567D"}
+2	NRIC lowercase	{"content":"customer s1234567d"}
+2	FIN M-series	{"content":"worker M1234567K"}
+2	card spaced	{"content":"4111 1111 1111 1111"}
+2	card dashed	{"content":"4111-1111-1111-1111"}
+0	plain code	{"content":"def add(a, b):\n    return a + b"}
+0	git command	{"command":"git status"}
+0	uuid	{"content":"id=550e8400-e29b-41d4-a716-446655440000"}

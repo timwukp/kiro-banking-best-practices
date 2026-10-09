@@ -21,8 +21,8 @@ This document provides comprehensive best practices for Singapore banking develo
 **Key Security Principles:**
 - **Zero Trust Architecture**: All access authenticated and authorized through Enterprise IdP
 - **Network Isolation**: Private subnets with in-region VPC endpoints for AWS services, and an allowlisted HTTPS egress path for Kiro (optionally AWS PrivateLink in the Kiro profile region)
-- **Controlled Environment**: Amazon WorkSpaces VDI with DLP enforcement
-- **MCP Governance**: Centrally managed whitelist with developer restrictions
+- **Controlled Environment**: Amazon WorkSpaces VDI with DLP controls and no local administrator rights
+- **MCP Governance**: Kiro MCP governance with a version-pinned MCP registry, admin permission rules in `managed-settings.json`, and workspace trust
 - **MAS Alignment**: Designed to support alignment with the MAS Technology Risk Management Guidelines and applicable MAS Notices; each institution remains responsible for its own compliance assessment
 
 ---
@@ -68,7 +68,7 @@ This document provides comprehensive best practices for Singapore banking develo
 │  │  │  - Kiro CLI/IDE Installed                       │  │  │
 │  │  │  - Sign-in limited to IdC (managed settings)    │  │  │
 │  │  │  - DLP Agent Running                            │  │  │
-│  │  │  - Centralized MCP Configuration                │  │  │
+│  │  │  - MCP registry + managed-settings.json         │  │  │
 │  │  │  - No Local Admin Rights                        │  │  │
 │  │  └─────────────────────────────────────────────────┘  │  │
 │  └─────────────┬───────────────────────────┬─────────────┘  │
@@ -162,8 +162,11 @@ SCIM Endpoint: https://scim.<region>.amazonaws.com/<directory-id>/scim/v2/
 
 **Centralized User Management:**
 
+Assign Kiro subscriptions to IAM Identity Center users or groups in the Kiro console. A permission-set account assignment (below) is a different thing: it grants access to an AWS account, for example for the administrators who manage WorkSpaces, and does not give anyone a Kiro subscription.
+
 ```bash
-# Assign Kiro subscription to users/groups via IAM IDC
+# Grant an IAM Identity Center group access to an AWS account (permission set).
+# This does NOT assign a Kiro subscription.
 aws sso-admin create-account-assignment \
   --instance-arn arn:aws:sso:::instance/<instance-id> \
   --target-id <aws-account-id> \
@@ -177,8 +180,8 @@ aws sso-admin create-account-assignment \
 
 | Role | Kiro Access | MCP Permissions | Admin Console |
 |------|-------------|-----------------|---------------|
-| **Developer** | Full | Whitelist Only | No |
-| **Lead Developer** | Full | Whitelist + Request | No |
+| **Developer** | Full | MCP registry servers only | No |
+| **Lead Developer** | Full | MCP registry servers + change request for new servers | No |
 | **Security Admin** | Read-Only | Full Control | Yes |
 | **Compliance Officer** | Audit Only | Read-Only | Yes |
 
@@ -330,6 +333,8 @@ Section 3.2.1 shows the complete WorkSpaces security group, including the VPC en
 
 **Enable CloudTrail for Kiro:**
 ```bash
+# Multi-region trail, so that it also covers the Kiro profile region
+# (the Monitoring stack in cdk/ creates an equivalent trail)
 aws cloudtrail create-trail \
   --name kiro-audit-trail \
   --s3-bucket-name kiro-audit-logs-<account-id> \
@@ -337,25 +342,29 @@ aws cloudtrail create-trail \
   --is-multi-region-trail \
   --enable-log-file-validation
 
-# Enable data events for Kiro
+aws cloudtrail start-logging --name kiro-audit-trail
+
+# Management events only. Kiro does not document CloudTrail data events,
+# so do not configure data resources for Kiro.
 aws cloudtrail put-event-selectors \
   --trail-name kiro-audit-trail \
   --event-selectors '[{
     "ReadWriteType": "All",
-    "IncludeManagementEvents": true,
-    "DataResources": [{
-      "Type": "AWS::Q::*",
-      "Values": ["arn:aws:q:*:*:*"]
-    }]
+    "IncludeManagementEvents": true
   }]'
 ```
 
+**What CloudTrail does and does not show:**
+- Kiro docs say only that CloudTrail "captures API calls"; they do not document Kiro's event source names or any data events. Verify in your own account which event sources appear in the profile region (candidates: `codewhisperer.amazonaws.com`, `q.amazonaws.com`) before you build detections.
+- MCP tools run on the client, so MCP tool calls do not appear in CloudTrail.
+- The record of AI-assisted activity comes from Kiro itself: **prompt logging** and **user activity reports**, both delivered to S3 in the Kiro profile region ([Part 2, Sections 8.2 and 9.3](Kiro-Banking-Best-Practices-Part2.md)). The OpenTelemetry export carries usage metrics only. A local `PostToolUse` hook audit log adds per-device tool-call records, but it is supplementary and not tamper-proof.
+
 **Key Events to Monitor:**
-- User authentication (success/failure)
-- Kiro API calls (chat, code generation, MCP tool usage)
-- MCP server configuration changes
-- Administrative actions
-- Data access patterns
+- User authentication (success/failure) in IAM Identity Center or the external IdP
+- Kiro administrative changes (subscriptions, console settings) as they appear in CloudTrail in your account
+- Kiro prompt logs and user activity reports (usage per user, unusual volumes)
+- KMS key policy changes and key use for the Kiro customer managed key
+- Changes to the MCP registry file (source repository and hosting bucket) and to `managed-settings.json` (MDM compliance reports)
 
 ---
 
@@ -724,7 +733,7 @@ aws route53 change-resource-record-sets \
 
 ### 4.1 Amazon WorkSpaces Configuration
 
-**Rationale:** Centralized control over developer environments prevents unauthorized MCP server installation and ensures DLP enforcement.
+**Rationale:** Centralized control over developer environments supports the Kiro client controls (managed settings, MCP governance) and DLP. Kiro's client-side controls can be removed by a user with local administrator rights, so the VDI controls below (no local admin, application allow-listing) are what keep them in place.
 
 #### 4.1.1 WorkSpaces Bundle Selection
 
@@ -834,6 +843,8 @@ Computer Configuration > Administrative Templates > Windows Components > Windows
 }
 ```
 
+The process names in "Monitor Kiro Outputs" are examples; check the executable names of the Kiro IDE and CLI versions you install.
+
 **DLP Agent Installation (via GPO):**
 ```powershell
 # Deploy DLP agent via startup script
@@ -845,63 +856,59 @@ Start-Process msiexec.exe -ArgumentList "/i $dlpInstaller /quiet /norestart" -Wa
 
 #### 4.2.1 MCP Configuration Deployment
 
-**Objective:** Prevent developers from installing unauthorized MCP servers.
+**Objective:** limit developers to approved MCP servers and apply the administrator's permission rules on every WorkSpace.
 
-**Centralized Configuration Location:**
-```
-\\fileserver\kiro-config\mcp.json (Read-Only for users)
-```
+> **Changed in this version:** earlier versions of this guide copied a central `mcp.json` to `C:\ProgramData\Kiro\mcp.json`, locked it with ACLs and symlinked `%USERPROFILE%\.kiro\settings\mcp.json` to it. That path is not a Kiro configuration location, and a user can replace a symlink in their own profile. Remove those files (the compliance check in Section 4.3.2 looks for them) and use the controls below.
 
-**Deployment via GPO:**
+| Control | Where it is set | What it does |
+|---------|-----------------|--------------|
+| **MCP governance and MCP registry** | Kiro console > Settings > Shared settings (MCP toggle, MCP Registry URL) | Only servers listed in the registry load, at the exact pinned version. See [Part 2, Section 5](Kiro-Banking-Best-Practices-Part2.md) |
+| **Admin policy** | `C:\ProgramData\Kiro\managed-settings.json`, deployed by GPO or Intune | Admin `deny` / `ask` permission rules and the sign-in restriction (Section 2.2.1) |
+| **Workspace trust** | Each Kiro client | An untrusted repository's MCP configuration, steering, agents and skills are not loaded |
+| **MCP configuration files** | `%USERPROFILE%\.kiro\settings\mcp.json` (user) and `.kiro\settings\mcp.json` (workspace) | Kiro reads MCP servers only from these files; the agent can never write them. With a registry, entries can only add overrides to listed servers |
+
+**Deploy `managed-settings.json` with a GPO computer startup script** (runs as SYSTEM). The reference policy is [`managed-settings/managed-settings.banking.json`](managed-settings/managed-settings.banking.json); see [`managed-settings/README.md`](managed-settings/README.md) for macOS, Linux and MDM deployment.
+
 ```powershell
-# Group Policy Startup Script
-$source = "\\fileserver\kiro-config\mcp.json"
-$destination = "C:\ProgramData\Kiro\mcp.json"
+# GPO computer startup script (runs as SYSTEM)
+$source = "\\fileserver\kiro-config\managed-settings.json"   # change-controlled copy
+$dir    = "C:\ProgramData\Kiro"
+$dest   = Join-Path $dir "managed-settings.json"
 
-# Copy centralized config
-Copy-Item -Path $source -Destination $destination -Force
+New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
-# Set read-only permissions
-$acl = Get-Acl $destination
-$acl.SetAccessRuleProtection($true, $false)
-$rule = New-Object System.Security.AccessControl.FileSystemAccessRule("Users", "Read", "Allow")
-$acl.AddAccessRule($rule)
-Set-Acl $destination $acl
+# Validate before deploying: an invalid file makes Kiro deny every tool call,
+# and an "allow" rule makes Kiro reject the whole file
+$json   = [System.IO.File]::ReadAllText($source)
+$policy = $json | ConvertFrom-Json -ErrorAction Stop
+if ($null -eq $policy.rules) { throw "managed-settings.json must contain a rules array" }
+if ($policy.rules | Where-Object { $_.effect -notin @('deny', 'ask') }) { throw "admin rules may only use deny or ask" }
 
-# Create symbolic link for user-level config (override)
-$userConfig = "$env:USERPROFILE\.kiro\settings\mcp.json"
-New-Item -ItemType SymbolicLink -Path $userConfig -Target $destination -Force
+# Write UTF-8 WITHOUT a byte order mark. Windows PowerShell Out-File writes UTF-16
+# by default and Set-Content/Out-File -Encoding UTF8 add a BOM; Kiro rejects both.
+[System.IO.File]::WriteAllText($dest, $json, (New-Object System.Text.UTF8Encoding $false))
+
+# Administrators (S-1-5-32-544) and SYSTEM (S-1-5-18) full control; Users (S-1-5-32-545) read only
+icacls $dir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
 ```
 
-**File System Permissions:**
-```
-C:\ProgramData\Kiro\mcp.json
-- SYSTEM: Full Control
-- Administrators: Full Control
-- Users: Read Only
-```
+With Intune, deploy the same file with a PowerShell script or Win32 app that runs in the system context and writes it the same way. Restart Kiro after every change; sign-in controls take effect at the next sign-in.
+
+**Caveats:**
+- **Client-enforced:** Kiro documents that these policies can be circumvented by a user with administrative access to the machine. Section 4.1.2 removes local administrator rights; keep it that way.
+- **Fails closed for permission rules, open for sign-in rules:** a malformed file, an `allow` effect or an unknown field blocks all of the agent's tool calls until the file is fixed; the same invalid file drops the sign-in restriction. Validate in the pipeline and on a pilot WorkSpace before rollout.
+- **Versions:** permission rules use the Kiro IDE 1.0+ / Kiro CLI V3 permission system, and sign-in controls need IDE 1.2+ / CLI 2.25.0+. Enforce a minimum client version (Kiro managed updates).
+- **Not covered:** Kiro Web (Cloud Sessions) and devices without the file. Keep Cloud Sessions off in the Kiro console.
 
 #### 4.2.2 Workspace-Level Config Prevention
 
-**Block Local MCP Configuration:**
-```powershell
-# GPO: Deny write access to workspace config locations
-$workspaceConfigPaths = @(
-    "$env:USERPROFILE\.kiro\settings",
-    "$env:APPDATA\Kiro\settings"
-)
+No ACL change is needed to stop the agent from changing Kiro's configuration, and denying users write access to their own `.kiro` folders breaks Kiro, which writes its own state there. Rely on these documented behaviours instead:
 
-foreach ($path in $workspaceConfigPaths) {
-    if (Test-Path $path) {
-        $acl = Get-Acl $path
-        $denyRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-            "Users", "Write,CreateFiles,AppendData", "Deny"
-        )
-        $acl.AddAccessRule($denyRule)
-        Set-Acl $path $acl
-    }
-}
-```
+- **Hardcoded invariants:** Kiro always denies agent writes to `~/.kiro/settings/`, `.kiro/settings/` and `~/.kiro/workspace-roots/`, and always asks before agent writes to `.git/**` and to the agents, hooks, workflows and powers directories under `.kiro` and `~/.kiro`.
+- **Workspace rules live outside the repository:** workspace permission rules are stored per user in `~/.kiro/workspace-roots/<hash>/permissions.yaml`, so a cloned repository cannot inject permission rules.
+- **Workspace trust:** a cloned repository can still contain `.kiro/settings/mcp.json`, steering, agents, skills and hooks. Leave unknown repositories untrusted: Kiro then does not load their MCP configuration, agents, steering, skills or workflows, and asks before every shell command and MCP tool call. Kiro does not document whether workspace hook files run in an untrusted workspace, so review `.kiro/hooks/` in third-party repositories.
+- **The developer can still edit user-level files** (`%USERPROFILE%\.kiro\settings\mcp.json`, `permissions.yaml`). That is why admin rules live in `managed-settings.json` and the MCP allow list lives in the registry: user files cannot weaken an admin `deny` or `ask`, and unlisted MCP servers stay hidden.
+- **Global hooks** deployed by MDM to `%USERPROFILE%\.kiro\hooks\` are defense in depth; see [`agent-hooks/README.md`](agent-hooks/README.md) for installation and for protecting them at the OS level.
 
 ### 4.3 Monitoring & Compliance
 
@@ -928,38 +935,76 @@ aws workspaces modify-workspace-properties \
 
 #### 4.3.2 Compliance Validation
 
-**Automated Compliance Checks:**
+**Automated Compliance Checks** (run daily as SYSTEM, for example as a scheduled task; adjust the DLP service name and the approved administrator accounts):
 ```powershell
 # Daily compliance validation script
 function Test-KiroCompliance {
     $results = @()
-    
-    # Check 1: MCP config is centralized
-    $mcpConfig = "C:\ProgramData\Kiro\mcp.json"
-    $results += @{
-        Check = "Centralized MCP Config"
-        Status = (Test-Path $mcpConfig) -and ((Get-Acl $mcpConfig).Access | Where-Object {$_.IdentityReference -eq "BUILTIN\Users" -and $_.FileSystemRights -eq "Read"})
+    $managed = "C:\ProgramData\Kiro\managed-settings.json"
+
+    # Check 1: managed-settings.json is present, UTF-8 without BOM, valid JSON,
+    # has a rules array and uses only deny/ask effects
+    $valid = $false
+    if (Test-Path $managed) {
+        $bytes = [System.IO.File]::ReadAllBytes($managed)
+        if ($bytes.Length -gt 0 -and $bytes[0] -eq 0x7B) {   # first byte must be '{' (no BOM, not UTF-16)
+            try {
+                $policy = [System.Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json -ErrorAction Stop
+                $valid = ($null -ne $policy.rules) -and
+                         -not ($policy.rules | Where-Object { $_.effect -notin @('deny', 'ask') })
+            } catch { $valid = $false }
+        }
     }
-    
-    # Check 2: DLP agent is running
-    $results += @{
-        Check = "DLP Agent Running"
+    $results += [pscustomobject]@{ Check = "Managed settings present and valid"; Status = $valid }
+
+    # Check 2: standard users cannot modify the managed-settings file
+    $userWritable = $true
+    if (Test-Path $managed) {
+        $writeRights = [System.Security.AccessControl.FileSystemRights]'WriteData, AppendData, Delete, ChangePermissions, TakeOwnership'
+        $userSids = @('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545')   # Everyone, Authenticated Users, Users
+        $rules = (Get-Acl $managed).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+        $userWritable = [bool]($rules | Where-Object {
+            $_.AccessControlType -eq 'Allow' -and
+            $userSids -contains $_.IdentityReference.Value -and
+            ($_.FileSystemRights -band $writeRights)
+        })
+    }
+    $results += [pscustomobject]@{ Check = "Managed settings read-only for users"; Status = -not $userWritable }
+
+    # Check 3: DLP agent is running
+    $results += [pscustomobject]@{
+        Check  = "DLP Agent Running"
         Status = (Get-Service -Name "DLPAgent" -ErrorAction SilentlyContinue).Status -eq "Running"
     }
-    
-    # Check 3: No local admin rights
-    $results += @{
-        Check = "No Local Admin"
-        Status = -not (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
+
+    # Check 4: local Administrators group holds only approved accounts
+    $approvedAdmins = @("$env:COMPUTERNAME\Administrator", "CORP\WorkSpaces-Admins")
+    $admins = Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty Name
+    $results += [pscustomobject]@{
+        Check  = "No Local Admin for developers"
+        Status = -not ($admins | Where-Object { $approvedAdmins -notcontains $_ })
     }
-    
+
+    # Check 5: no leftovers from the earlier, undocumented mcp.json lockdown
+    $legacyFile = Test-Path "C:\ProgramData\Kiro\mcp.json"
+    $legacyLinks = Get-ChildItem -Path "C:\Users\*\.kiro\settings\mcp.json" -Force -ErrorAction SilentlyContinue |
+                   Where-Object { $_.LinkType }
+    $results += [pscustomobject]@{
+        Check  = "No legacy central mcp.json or symlinked user mcp.json"
+        Status = (-not $legacyFile) -and (-not $legacyLinks)
+    }
+
     return $results
 }
 
 # Run and report
-$complianceResults = Test-KiroCompliance
-$complianceResults | Export-Csv -Path "\\fileserver\compliance\kiro-compliance-$(Get-Date -Format 'yyyyMMdd').csv" -Append
+$complianceResults = Test-KiroCompliance |
+    Select-Object @{ n = 'Computer'; e = { $env:COMPUTERNAME } }, @{ n = 'Date'; e = { Get-Date -Format 's' } }, Check, Status
+$complianceResults | Export-Csv -NoTypeInformation -Append -Path "\\fileserver\compliance\kiro-compliance-$(Get-Date -Format 'yyyyMMdd').csv"
 ```
+
+The MCP registry and the other Kiro console settings are organization-wide, so check them centrally (monthly audit checklist in Part 2, Appendix B) rather than on each WorkSpace.
 
 ---
 

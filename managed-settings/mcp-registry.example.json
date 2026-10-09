@@ -1,0 +1,46 @@
+{
+  "servers": [
+    {
+      "server": {
+        "name": "aws-documentation",
+        "title": "AWS Documentation",
+        "description": "Search and read public AWS documentation. Example entry: pin your own vetted version.",
+        "version": "1.2.3",
+        "packages": [
+          {
+            "registryType": "pypi",
+            "registryBaseUrl": "https://pypi.org",
+            "identifier": "awslabs.aws-documentation-mcp-server",
+            "transport": {
+              "type": "stdio"
+            },
+            "environmentVariables": [
+              {
+                "name": "FASTMCP_LOG_LEVEL",
+                "value": "ERROR"
+              },
+              {
+                "name": "AWS_DOCUMENTATION_PARTITION",
+                "value": "aws"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "server": {
+        "name": "bank-internal-standards",
+        "title": "Bank engineering standards",
+        "description": "Example internal remote MCP server for engineering standards. Replace URL and version.",
+        "version": "1.0.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mcp.internal.example.com/standards/mcp"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,120 +1,147 @@
 #!/usr/bin/env bash
-# run-chaos.sh - Chaos / penetration harness for endpoint-control validation.
+# run-chaos.sh - Round 1: chaos / penetration harness for the endpoint controls of this repo.
 #
-# Run as ROOT (e.g. via SSM) on a sandbox host. It:
-#   1. creates a NON-privileged attacker user (devx, no sudo),
-#   2. deploys the controls as root (immutable hooks/agent, append-only audit,
-#      root-owned command guard, decoy "production" + canary fake-PII, local sink),
-#   3. runs the attack catalog as devx (human) and via crafted agent hook events,
-#   4. logs every attack + the LITERAL command + defensive outcome to a hash-chained JSONL,
-#   5. prints a summary, emits the log, and cleans up.
+# SCOPE: exercises HOOK-LEVEL controls (the shipped agent-hooks/*.sh, fed crafted Kiro hook events)
+# and OS-LEVEL controls (file ownership, chattr +i / +a, sudo, PATH) only. It does NOT drive a real
+# Kiro client, so it cannot show whether Kiro evaluates managed-settings.json rules; verify those on
+# a pilot machine (managed-settings/README.md, "Validation"). Attacks marked "agent" are simulated
+# by feeding the event JSON that Kiro would send to a hook; they are not issued by a Kiro agent.
 #
-# Defensive validation only; fully contained to a sandbox; no real prod/secrets/egress.
-# Per-attack method/purpose/technique are documented in kiro-docs/chaos-pentest-evidence.md.
-
+# MODES
+#   --hooks-only   No root, no system changes, safe on a laptop or in CI. Runs only the hook-level
+#                  attacks (series D) against agent-hooks/*.sh in place, with HOME and
+#                  KIRO_AUDIT_LOG redirected to a temporary directory.
+#   (default)      Full run. Requires ALL of: Linux, root, a THROWAWAY VM, CHAOS_ALLOW_SYSTEM_CHANGES=1.
+#                  It creates a new local account (CHAOS_USER, default "kirochaos") and aborts if that
+#                  account already exists; it never reuses or deletes a pre-existing account. It
+#                  deploys the SHIPPED controls with mdm/lockdown-linux.sh into a temporary --prefix
+#                  under /var/tmp (never the real /etc or /opt), runs the attack catalog as that
+#                  non-privileged user, logs every attempt with its literal command to a hash-chained
+#                  JSONL, then deletes the account it created and the sandbox (also on error).
+#
+#   sudo CHAOS_ALLOW_SYSTEM_CHANGES=1 bash security-tests/chaos/run-chaos.sh      # throwaway VM only
+#   bash security-tests/chaos/run-chaos.sh --hooks-only                            # anywhere
+#
+# The "demo PATH guard" (a root-owned git wrapper first on PATH) is a deliberately basic control
+# kept from the original round 1 to show its limits (C1/C2); it is not a recommended control.
+# Method and purpose of every attack: kiro-docs/chaos-pentest-evidence.md.
 set -u
-ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-HOOKS="$ROOT_DIR/agent-hooks"
-[ "$(id -u)" -eq 0 ] || { echo "must run as root"; exit 1; }
-command -v chattr >/dev/null 2>&1 || { echo "chattr required"; exit 1; }
+. "$(cd "$(dirname "$0")" && pwd)/chaos-lib.sh"
 
-S="$(mktemp -d /var/tmp/chaos.XXXXXX)"
-MG="$S/managed"; MGH="$MG/hooks"; GBIN="$S/bin"; PROD="$S/prod"
-CANARY="$S/canary.txt"; SINK="$S/sink"; AUDIT="$MG/audit.jsonl"
-LOG="$S/results.jsonl"; CMDF="$S/.cmd"; PREV="GENESIS"
-N=0; BLOCKED=0; BYPASSED=0; GAP=0; RC=0
+case "${1:-}" in
+  --hooks-only) HOOKS_ONLY=1 ;;
+  "") ;;
+  -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+  *) cdie "unknown option: $1 (use --hooks-only or no option)" ;;
+esac
+command -v jq >/dev/null 2>&1 || cdie "jq is required (the hooks need it too)"
+for h in $CHAOS_GUARDS audit-logger.sh; do [ -f "$CHAOS_HOOKS_SRC/$h" ] || cdie "shipped hook not found: agent-hooks/$h"; done
+[ "$HOOKS_ONLY" = 1 ] || chaos_require_system_mode
 
-sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | awk '{print $1}'; else shasum -a 256 | awk '{print $1}'; fi; }
-san() { printf '%s' "$1" | tr -d '\n\r' | sed "s/\"/'/g" | cut -c1-160; }
+chaos_banner "ROUND 1 ($( [ "$HOOKS_ONLY" = 1 ] && echo 'hooks-only' || echo 'full' ) run)"
+chaos_sandbox kiro-chaos
 
-# rec <id> <actor> <technique> <expected> <actual> <result>   (logs global CMD)
-rec() {
-  N=$((N + 1))
-  local ts body h
-  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  body="$(printf '{"n":%d,"id":"%s","actor":"%s","technique":"%s","cmd":"%s","expected":"%s","actual":"%s","result":"%s","ts":"%s","prev":"%s"}' \
-    "$N" "$1" "$2" "$3" "$(san "$(cat "$CMDF" 2>/dev/null)")" "$4" "$5" "$6" "$ts" "$PREV")"
-  h="$(printf '%s' "$body" | sha)"
-  printf '%s hash=%s\n' "$body" "$h" >> "$LOG"
-  PREV="$h"
-  case "$6" in BLOCKED) BLOCKED=$((BLOCKED+1));; BYPASSED) BYPASSED=$((BYPASSED+1));; GAP) GAP=$((GAP+1));; esac
-  printf '  [%-8s] %-5s %-4s %s\n' "$6" "$2" "$1" "$3"
-}
-
-# run a command AS the non-privileged attacker; record it in CMD; echo output; set RC
-dev() { printf '%s' "$1" > "$CMDF"; local o; o="$(su devx -c "PATH=$GBIN:\$PATH; $1" 2>&1)"; RC=$?; printf '%s' "$o"; }
-# feed a crafted preToolUse event to a guard hook AS devx; rc 2 == blocked; record the cmd
-hookev() { printf "printf '%%s' '%s' | bash %s" "$2" "$1" > "$CMDF"; su devx -c "PATH=$GBIN:\$PATH; printf '%s' '$2' | bash '$MGH/$1'" >/dev/null 2>&1; echo $?; }
-ev() { printf '{"hook_event_name":"preToolUse","tool_name":"%s","tool_input":{"command":%s}}' "$1" "$2"; }
-evw() { printf '{"hook_event_name":"preToolUse","tool_name":"write","tool_input":{"content":%s}}' "$1"; }
-
-echo "=== SETUP (as root = org/MDM control plane) ==="
-id devx >/dev/null 2>&1 || useradd -m devx
-mkdir -p "$MGH" "$MG/agents" "$GBIN" "$PROD" "$SINK"
-install -o root -g root -m 0755 "$HOOKS"/*.sh "$MGH"/
-install -o root -g root -m 0644 "$HOOKS/banking-secure.agent.json" "$MG/agents/banking-secure.json"
-chattr +i "$MGH"/*.sh "$MG/agents/banking-secure.json" 2>/dev/null
-: > "$AUDIT"; echo '{"seed":1}' >> "$AUDIT"; chown root:root "$AUDIT"; chmod 0644 "$AUDIT"; chattr +a "$AUDIT" 2>/dev/null
-cat > "$GBIN/git" <<'GUARD'
+if [ "$HOOKS_ONLY" = 1 ]; then
+  HOOKD="$CHAOS_HOOKS_SRC"
+else
+  echo "=== SETUP (as root = MDM / control plane) ==="
+  [ -f "$CHAOS_HOOKS_SRC/SHA256SUMS" ] || cdie "agent-hooks/SHA256SUMS not found; the shipped hooks are only deployed after hash verification"
+  chaos_create_user
+  P="$S/root"
+  bash "$CHAOS_MDM" --prefix "$P" --hooks --install-user "$CHAOS_USER" --user-home "$UHOME" \
+    || cdie "mdm/lockdown-linux.sh refused or failed; nothing to test"
+  POLICY="$P/etc/kiro/managed-settings.json"; HOOKD="$P/opt/kiro/hooks"
+  AUDIT="$UHOME/.kiro/audit/kiro-hooks.jsonl"; V1="$UHOME/.kiro/hooks/banking-guards.json"
+  MDMARGS="--prefix $P --hooks --install-user $CHAOS_USER --user-home $UHOME"
+  printf '%s\n' '{"seed":1}' | runuser -u "$CHAOS_USER" -- tee -a "$AUDIT" >/dev/null
+  # Demo PATH guard (basic control, see header), decoy production data, synthetic canary, local sink.
+  GBIN="$S/bin"; PROD="$S/prod"; CANARY="$S/canary.txt"; SINK="$S/sink"
+  mkdir -p "$GBIN" "$PROD" "$SINK"
+  cat > "$GBIN/git" <<'GUARD'
 #!/bin/bash
-for a in "$@"; do case "$a" in --force|--force-with-lease|-f) echo "POLICY: force-push DENIED by system" >&2; exit 1;; esac; done
-case "$*" in *push*main*|*push*master*) echo "POLICY: push to protected branch DENIED by system" >&2; exit 1;; esac
+for a in "$@"; do case "$a" in --force|--force-with-lease|-f) echo "POLICY: force-push denied by the demo PATH guard" >&2; exit 1;; esac; done
+case "$*" in *push*main*|*push*master*) echo "POLICY: push to a protected branch denied by the demo PATH guard" >&2; exit 1;; esac
 exec /usr/bin/git "$@"
 GUARD
-chmod 0755 "$GBIN/git"; chown root:root "$GBIN/git"; chattr +i "$GBIN/git" 2>/dev/null
-echo "prod data" > "$PROD/data"; chown -R root:root "$PROD"; chmod -R 0755 "$PROD"; chmod 0644 "$PROD/data"
-echo "card 4111 1111 1111 1111 NRIC S1234567D AKIAIOSFODNN7EXAMPLE" > "$CANARY"; chown root:root "$CANARY"; chmod 0644 "$CANARY"
-chown devx:devx "$SINK"
-chmod 0755 "$S" "$MG" "$MGH" "$MG/agents" "$GBIN"
-echo "devx sudo check: $(su devx -c 'sudo -n true 2>&1' | head -1) (rc nonzero == no sudo)"
+  chown root:root "$GBIN/git"; chmod 0755 "$GBIN" "$GBIN/git"; chattr +i "$GBIN/git" 2>/dev/null
+  echo "prod data" > "$PROD/data"; chown -R root:root "$PROD"; chmod 0755 "$PROD"; chmod 0644 "$PROD/data"
+  echo "card 4111 1111 1111 1111 NRIC S1234567D AKIAIOSFODNN7EXAMPLE" > "$CANARY"; chmod 0644 "$CANARY"
+  chown "$CHAOS_USER" "$SINK"
+  DEV_PATH="$GBIN:/usr/local/bin:/usr/bin:/bin"
+  echo
+  echo "=== ATTACKS as $CHAOS_USER (non-privileged human in a plain shell) ==="
+
+  # A. Integrity tamper - disable or erase the deployed controls (expect BLOCKED unless noted).
+  G="$HOOKD/destructive-fs-guard.sh"
+  dev "echo x >> '$G'" >/dev/null; judge A1 human "modify deployed hook (echo >>)" BLOCKED "$([ "$RC" -ne 0 ] && echo 1 || echo 0)" "rc=$RC"
+  dev "rm -f '$G'" >/dev/null; judge A2 human "delete deployed hook (rm)" BLOCKED "$([ -e "$G" ] && echo 1 || echo 0)" "exists=$([ -e "$G" ] && echo yes || echo no)"
+  dev "chattr -i '$G'" >/dev/null; judge A3 human "clear immutable attribute (chattr -i)" BLOCKED "$([ "$RC" -ne 0 ] && echo 1 || echo 0)" "rc=$RC"
+  dev ": > '$AUDIT'" >/dev/null; judge A4 human "truncate append-only hook audit log" BLOCKED "$([ -s "$AUDIT" ] && echo 1 || echo 0)" "size=$(wc -c < "$AUDIT")"
+  dev "cp /bin/true '$GBIN/git'" >/dev/null; judge A5 human "replace the demo PATH guard" BLOCKED "$([ "$RC" -ne 0 ] && echo 1 || echo 0)" "rc=$RC"
+  dev "echo '{\"rules\":[]}' > '$POLICY'" >/dev/null; judge A6 human "overwrite managed-settings.json" BLOCKED "$([ "$RC" -ne 0 ] && echo 1 || echo 0)" "rc=$RC"
+  dev "rm -f '$POLICY' || mv '$P/etc/kiro' '$P/etc/kiro.x'" >/dev/null; judge A7 human "delete or move managed-settings.json" BLOCKED "$([ -f "$POLICY" ] && echo 1 || echo 0)" "exists=$([ -f "$POLICY" ] && echo yes || echo no)"
+  # A8: the per-user v1 hook file is user-owned BY DESIGN (Kiro only loads ~/.kiro/hooks). Expected
+  # GAP; the MDM drift check must then report it and a re-run must restore it.
+  dev "rm -f '$V1'" >/dev/null; judge A8 human "delete user-owned ~/.kiro/hooks/banking-guards.json" GAP "$([ -e "$V1" ] && echo 1 || echo 0)" "exists=$([ -e "$V1" ] && echo yes || echo no)"
+  # shellcheck disable=SC2086
+  bash "$CHAOS_MDM" --check $MDMARGS >/dev/null 2>&1; crc=$?; LAST_CMD="lockdown-linux.sh --check (as root)"
+  [ "$crc" = 3 ] && rec A8d mdm "drift check reports the deleted user file" BLOCKED DETECTED "check rc=3" || rec A8d mdm "drift check reports the deleted user file" BLOCKED BYPASSED "check rc=$crc"
+  # shellcheck disable=SC2086
+  bash "$CHAOS_MDM" $MDMARGS >/dev/null 2>&1; LAST_CMD="lockdown-linux.sh (re-run as root)"
+  judge A8r mdm "re-run restores the user file" BLOCKED "$([ -f "$V1" ] && echo 1 || echo 0)" "exists=$([ -f "$V1" ] && echo yes || echo no)"
+  # A9: the developer owns ~/.kiro/audit and can rename it (documented limitation of the local log).
+  dev "mv '$UHOME/.kiro/audit' '$UHOME/.kiro/audit.moved'" >/dev/null; judge A9 human "rename the user-owned audit directory" GAP "$([ "$RC" -ne 0 ] && echo 1 || echo 0)" "rc=$RC"
+  [ -d "$UHOME/.kiro/audit.moved" ] && runuser -u "$CHAOS_USER" -- mv "$UHOME/.kiro/audit.moved" "$UHOME/.kiro/audit"
+
+  # B. Privilege probing.
+  dev "sudo -n true" >/dev/null; judge B1 human "non-interactive sudo" BLOCKED "$([ "$RC" -ne 0 ] && echo 1 || echo 0)" "rc=$RC"
+  Wd="$(dev "find '$GBIN' /usr/local/bin /usr/bin -maxdepth 1 -writable 2>/dev/null | head -1")"
+  judge B2 human "writable file or directory on PATH" BLOCKED "$([ -z "$Wd" ] && echo 1 || echo 0)" "${Wd:-none}"
+
+  # C. Command-guard and audit evasion.
+  O="$(dev "cd '$S' && git push --force 2>&1")"; judge C0 human "force-push through the demo PATH guard" BLOCKED "$(echo "$O" | grep -q POLICY && echo 1 || echo 0)" "$(echo "$O" | grep -q POLICY && echo policy || echo no-policy)"
+  O="$(dev "cd '$S' && /usr/bin/git push --force 2>&1")"; judge C1 human "real git by absolute path (bypasses a PATH guard)" GAP "$(echo "$O" | grep -q POLICY && echo 1 || echo 0)" "$(echo "$O" | grep -q POLICY && echo policy || echo guard-bypassed)"
+  O="$(dev "cp /usr/bin/git \$HOME/mygit && chmod +x \$HOME/mygit && cd '$S' && \$HOME/mygit push --force 2>&1")"; judge C2 human "own copy of the git binary" GAP "$(echo "$O" | grep -q POLICY && echo 1 || echo 0)" "$(echo "$O" | grep -q POLICY && echo policy || echo guard-bypassed)"
+  before="$(wc -l < "$AUDIT")"
+  dev "KIRO_AUDIT_LOG=/dev/null bash '$HOOKD/audit-logger.sh' <<< '{\"hook_event_name\":\"postToolUse\",\"tool_name\":\"execute_bash\",\"tool_input\":{\"command\":\"ls\"}}'" >/dev/null
+  judge C3 human "redirect the hook audit log (KIRO_AUDIT_LOG=/dev/null)" GAP "$([ "$(wc -l < "$AUDIT")" -gt "$before" ] && echo 1 || echo 0)" "lines $before -> $(wc -l < "$AUDIT")"
+fi
+
 echo
+echo "=== HOOK-LEVEL ATTACKS (crafted Kiro preToolUse events fed to the $( [ "$HOOKS_ONLY" = 1 ] && echo 'repo' || echo 'deployed' ) hooks) ==="
+DG="$HOOKD/destructive-fs-guard.sh"; GG="$HOOKD/git-guard.sh"; PG="$HOOKD/pii-guard.sh"
+hj D1 "rm -rf / (plain)" BLOCKED "$DG" "$(ev_shell 'rm -rf /')"
+hj D2 "rm -fr / (spaced, flag order)" BLOCKED "$DG" "$(ev_shell 'rm  -fr  /')"
+hj D3 "chained: ls && rm -rf /" BLOCKED "$DG" "$(ev_shell 'ls && rm -rf /')"
+hj D4 "base64-encoded command piped to bash" GAP "$DG" "$(ev_shell 'echo cm0gLXJmIC8K | base64 -d | bash')"
+hj D5 "card number (spaced) in written content" BLOCKED "$PG" "$(ev_write 'card 4111 1111 1111 1111')"
+hj D6 "card number base64-encoded" GAP "$PG" "$(ev_write 'NDExMSAxMTExIDExMTEgMTExMQ==')"
+hj D7 "git push -f origin main" BLOCKED "$GG" "$(ev_shell 'git push -f origin main')"
+# Variants from the PR3 review (fixed in agent-hooks/, regression-tested in agent-hooks/tests/).
+hj D8 "force push by refspec: git push origin +main" BLOCKED "$GG" "$(ev_shell 'git push origin +main')"
+hj D9 "git push --force-with-lease" BLOCKED "$GG" "$(ev_shell 'git push --force-with-lease origin feature/x')"
+hj D10 "option before subcommand: git -c x=y push --force" BLOCKED "$GG" "$(ev_shell 'git -c color.ui=false push --force origin feature/x')"
+hj D11 "wrapper: command rm -rf /" BLOCKED "$DG" "$(ev_shell 'command rm -rf /')"
+hj D12 "wrapper: env rm -rf ~" BLOCKED "$DG" "$(ev_shell 'env rm -rf ~')"
+hj D13 "quoting: \"rm\" -rf /" BLOCKED "$DG" "$(ev_shell '"rm" -rf /')"
+hj D14 "PEM private key header in written content" BLOCKED "$PG" "$(ev_write "-----BEGIN RSA PRIV""ATE KEY-----
+MIIEowIBAAKCAQEA
+-----END RSA PRIV""ATE KEY-----")"
+for g in $CHAOS_GUARDS; do
+  hj "D15-${g%%-*}" "malformed event JSON -> $g must fail closed (exit 2)" BLOCKED "$HOOKD/$g" '{"tool_input": {"command": "rm -rf /"'
+done
 
-echo "=== ATTACKS (as devx = non-privileged human / agent) ==="
+if [ "$HOOKS_ONLY" = 0 ]; then
+  echo
+  echo "=== PROHIBITED ACTIONS end-to-end (as $CHAOS_USER) ==="
+  dev "rm -f '$PROD/data'" >/dev/null; judge E1 human "delete root-owned decoy production file" BLOCKED "$([ -e "$PROD/data" ] && echo 1 || echo 0)" "exists=$([ -e "$PROD/data" ] && echo yes || echo no)"
+  dev "rm -rf '$PROD'" >/dev/null; judge E2 human "rm -rf root-owned decoy production directory" BLOCKED "$([ -d "$PROD" ] && echo 1 || echo 0)" "exists=$([ -d "$PROD" ] && echo yes || echo no)"
+  dev "cat '$CANARY' > '$SINK/leak.txt'" >/dev/null; judge E3 human "copy readable synthetic PII to a local sink (no egress control here)" GAP "$([ -s "$SINK/leak.txt" ] && echo 0 || echo 1)" "$([ -s "$SINK/leak.txt" ] && echo copied || echo blocked)"
+fi
 
-# A. Integrity tamper (expect BLOCKED)
-dev "echo x >> $MGH/destructive-fs-guard.sh" >/dev/null; [ "$RC" -ne 0 ] && rec A1 human "modify immutable hook (echo>>)" BLOCKED "rc=$RC" BLOCKED || rec A1 human "modify immutable hook (echo>>)" BLOCKED "wrote" BYPASSED
-dev "rm -f $MGH/destructive-fs-guard.sh" >/dev/null; [ -e "$MGH/destructive-fs-guard.sh" ] && rec A2 human "delete immutable hook (rm)" BLOCKED "exists" BLOCKED || rec A2 human "delete immutable hook (rm)" BLOCKED "deleted" BYPASSED
-dev "chattr -i $MGH/destructive-fs-guard.sh" >/dev/null; [ "$RC" -ne 0 ] && rec A3 human "remove immutable attr (chattr -i)" BLOCKED "rc=$RC" BLOCKED || rec A3 human "remove immutable attr (chattr -i)" BLOCKED "cleared" BYPASSED
-dev ": > $AUDIT" >/dev/null; [ -s "$AUDIT" ] && rec A4 human "truncate append-only audit" BLOCKED "nonempty" BLOCKED || rec A4 human "truncate append-only audit" BLOCKED "truncated" BYPASSED
-dev "cp /bin/true $GBIN/git" >/dev/null; [ "$RC" -ne 0 ] && rec A5 human "replace command guard" BLOCKED "rc=$RC" BLOCKED || rec A5 human "replace command guard" BLOCKED "replaced" BYPASSED
-
-# B. Privilege probing (expect no path)
-dev "sudo -n true" >/dev/null; [ "$RC" -ne 0 ] && rec B1 human "sudo -n (escalate)" BLOCKED "rc=$RC" BLOCKED || rec B1 human "sudo -n (escalate)" BLOCKED "got-root" BYPASSED
-W="$(dev "find $GBIN /usr/local/bin /usr/bin -maxdepth 1 -writable 2>/dev/null | head -1")"; [ -z "$W" ] && rec B2 human "writable bin in PATH" BLOCKED "none" BLOCKED || rec B2 human "writable bin in PATH" BLOCKED "writable" BYPASSED
-
-# C. Command-guard evasion
-O="$(dev "git push --force")"; echo "$O" | grep -q POLICY && rec C0 human "force-push via guarded git" BLOCKED "policy" BLOCKED || rec C0 human "force-push via guarded git" BLOCKED "nopolicy" BYPASSED
-O="$(dev "/usr/bin/git push --force")"; echo "$O" | grep -q POLICY && rec C1 human "absolute-path real git (bypass guard)" GAP "policy" BLOCKED || rec C1 human "absolute-path real git (bypass guard)" GAP "guard-bypassed" GAP
-O="$(dev "cp /usr/bin/git ~/mygit && chmod +x ~/mygit && ~/mygit push --force")"; echo "$O" | grep -q POLICY && rec C2 human "own copy of git binary" GAP "policy" BLOCKED || rec C2 human "own copy of git binary" GAP "guard-bypassed" GAP
-dev "KIRO_AUDIT_LOG=/dev/null KIRO_AUDIT_STATE=$S/st bash $MGH/audit-logger.sh <<< '{\"tool_name\":\"shell\"}'" >/dev/null; L1=$(wc -l < "$AUDIT"); [ "$L1" -gt 1 ] && rec C3 human "env override audit path (KIRO_AUDIT_LOG=/dev/null)" GAP "logged" BLOCKED || rec C3 human "env override audit path (KIRO_AUDIT_LOG=/dev/null)" GAP "audit-evaded" GAP
-
-# D. Hook evasion / FNR (direct hook events as devx)
-[ "$(hookev destructive-fs-guard.sh "$(ev shell '"rm -rf /"')")" = "2" ] && rec D1 agent "rm -rf / (plain)" BLOCKED "exit2" BLOCKED || rec D1 agent "rm -rf / (plain)" BLOCKED "allowed" BYPASSED
-[ "$(hookev destructive-fs-guard.sh "$(ev shell '"rm  -fr  /"')")" = "2" ] && rec D2 agent "rm -fr / (spaced/flag variant)" BLOCKED "exit2" BLOCKED || rec D2 agent "rm -fr / (spaced/flag variant)" BLOCKED "allowed" BYPASSED
-[ "$(hookev destructive-fs-guard.sh "$(ev shell '"ls && rm -rf /"')")" = "2" ] && rec D3 agent "chained rm -rf /" BLOCKED "exit2" BLOCKED || rec D3 agent "chained rm -rf /" BLOCKED "allowed" BYPASSED
-[ "$(hookev destructive-fs-guard.sh "$(ev shell '"echo cm0gLXJmIC8K | base64 -d | bash"')")" = "2" ] && rec D4 agent "base64-encoded rm -rf / (obfuscation)" GAP "exit2" BLOCKED || rec D4 agent "base64-encoded rm -rf / (obfuscation)" GAP "allowed" GAP
-[ "$(hookev pii-guard.sh "$(evw '"card 4111 1111 1111 1111"')")" = "2" ] && rec D5 agent "PII card (spaced)" BLOCKED "exit2" BLOCKED || rec D5 agent "PII card (spaced)" BLOCKED "allowed" BYPASSED
-[ "$(hookev pii-guard.sh "$(evw '"NDExMSAxMTExIDExMTEgMTExMQ=="')")" = "2" ] && rec D6 agent "PII card base64 (obfuscation)" GAP "exit2" BLOCKED || rec D6 agent "PII card base64 (obfuscation)" GAP "allowed" GAP
-[ "$(hookev git-guard.sh "$(ev shell '"git push -f origin main"')")" = "2" ] && rec D7 agent "git push -f (flag variant)" BLOCKED "exit2" BLOCKED || rec D7 agent "git push -f (flag variant)" BLOCKED "allowed" BYPASSED
-
-# E. Prohibited actions end-to-end (as devx)
-dev "rm -f $PROD/data" >/dev/null; [ -e "$PROD/data" ] && rec E1 human "delete decoy production file" BLOCKED "exists" BLOCKED || rec E1 human "delete decoy production file" BLOCKED "deleted" BYPASSED
-dev "rm -rf $PROD" >/dev/null; [ -d "$PROD" ] && rec E2 human "rm -rf decoy production dir" BLOCKED "exists" BLOCKED || rec E2 human "rm -rf decoy production dir" BLOCKED "deleted" BYPASSED
-dev "cat $CANARY > $SINK/leak.txt" >/dev/null; [ -s "$SINK/leak.txt" ] && rec E3 human "exfil canary PII to local sink (no egress ctrl)" GAP "exfiltrated" GAP || rec E3 human "exfil canary PII to local sink" GAP "blocked" BLOCKED
-
-echo
-echo "=== SANITIZED RESULT LOG (hash-chained; includes literal cmd per attempt) ==="
-cat "$LOG"
-echo
-echo "=== SUMMARY ==="
-echo "total=$N BLOCKED=$BLOCKED BYPASSED=$BYPASSED GAP=$GAP"
-echo "(BYPASSED = unexpected control failure to fix; GAP = expected endpoint limitation -> needs app-allowlisting / fixed audit path / Tier-1 server-side + egress)"
-
+chaos_summary
 echo
 echo "=== CLEANUP ==="
-chattr -ia "$AUDIT" 2>/dev/null
-find "$MG" "$GBIN" -exec chattr -i {} \; 2>/dev/null
-rm -rf "$S"
-userdel -r devx 2>/dev/null
-echo "cleanup done"
-[ "$BYPASSED" -eq 0 ] && echo "RESULT: no unexpected bypass" || echo "RESULT: $BYPASSED unexpected bypass(es) to harden"
+
+# Exit status: 0 only when nothing was bypassed and every sanity check passed.
+[ "$BYPASSED" -eq 0 ] && [ "$SANITY_FAIL" -eq 0 ]

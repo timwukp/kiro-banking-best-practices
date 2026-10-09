@@ -1,0 +1,57 @@
+# expected_exit<TAB>hook<TAB>shell command (tool_input.command)<TAB>[known_gap]
+# 2 = must be blocked, 0 = must be allowed. Commands are parsed as text by the guards; never executed.
+2	git-guard	git push -f origin feature/x
+2	git-guard	git push -f
+2	git-guard	git push --force origin main
+2	git-guard	git push --force-with-lease
+2	git-guard	git push origin +main
+2	git-guard	git push origin HEAD:main
+2	git-guard	git push origin feature:refs/heads/main
+2	git-guard	git push origin :main
+2	git-guard	git push origin --delete feature/x
+2	git-guard	git push --mirror
+2	git-guard	git -C . push --force
+2	git-guard	git -c core.x=y push -f origin main
+2	git-guard	git push origin main
+2	git-guard	git reset -q --hard
+2	git-guard	git -C . reset --hard HEAD~1
+2	git-guard	git clean -d -f
+2	git-guard	git clean -fdx
+2	git-guard	git clean --force
+2	git-guard	git branch -D main
+2	git-guard	git update-ref -d refs/heads/main
+2	git-guard	git filter-branch --tree-filter true HEAD
+2	git-guard	echo ok && git push -f
+2	git-guard	bash -c "git push --force"
+0	git-guard	git status
+0	git-guard	git commit -m "feat: add x"
+0	git-guard	git push origin feature/x
+0	git-guard	git push -u origin feature/x
+0	git-guard	git log --oneline -5
+2	destructive-fs-guard	rm -rf /
+2	destructive-fs-guard	rm -rf --no-preserve-root /
+2	destructive-fs-guard	rm -rf -- /
+2	destructive-fs-guard	rm -rf /;
+2	destructive-fs-guard	rm -rf ~
+2	destructive-fs-guard	rm -rf ~;
+2	destructive-fs-guard	rm -rf "$HOME"
+2	destructive-fs-guard	rm -rf ${HOME}
+2	destructive-fs-guard	rm -rf "/"
+2	destructive-fs-guard	rm -rf ../..
+2	destructive-fs-guard	rm -rf /home
+2	destructive-fs-guard	rm -fr .
+2	destructive-fs-guard	rm -rf .git
+2	destructive-fs-guard	rm -rf "./.git"
+2	destructive-fs-guard	mv .git /tmp/x
+2	destructive-fs-guard	bash -c "rm -rf ~"
+2	destructive-fs-guard	sh -c 'rm -rf /'
+2	destructive-fs-guard	find . -name "*.ts" -delete
+2	destructive-fs-guard	find . -exec rm -rf {} +
+2	destructive-fs-guard	mkfs.ext4 /dev/sdb1
+2	destructive-fs-guard	dd if=/dev/zero of=/dev/sda
+0	destructive-fs-guard	rm -rf ./build
+0	destructive-fs-guard	rm -rf node_modules
+0	destructive-fs-guard	rm file.txt
+0	destructive-fs-guard	dd if=input.bin of=/dev/null
+0	destructive-fs-guard	grep "find . -delete" notes.md
+0	destructive-fs-guard	ls -la
