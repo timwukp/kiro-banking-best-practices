@@ -5,7 +5,9 @@
 [![MAS TRM aligned](https://img.shields.io/badge/MAS%20TRM-aligned-blue)](https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines)
 [![AWS](https://img.shields.io/badge/AWS-Kiro-orange.svg)](https://kiro.dev)
 
-> Security-first guidance for implementing AWS Kiro in SDLC environments, designed to support alignment with the Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines. Each institution remains responsible for its own compliance assessment.
+> **Renamed:** this repository was renamed from `kiro-banking-best-practices` to `kiro-fsi-best-practices` (October 2026). Old links and clones redirect automatically. The banking reference implementation, file names and CDK resource names are unchanged.
+
+> Security-first guidance for implementing AWS Kiro in financial services (FSI) SDLC environments, with a Singapore banking reference implementation, designed to support alignment with the Monetary Authority of Singapore (MAS) Technology Risk Management Guidelines. Each institution remains responsible for its own compliance assessment.
 
 ---
 
@@ -26,11 +28,11 @@
 
 ## Overview
 
-This repository provides comprehensive best practices for FSI development teams implementing AWS Kiro (AI-powered development assistant) in Software Development Life Cycle (SDLC) environments. All guidance is designed to support alignment with MAS regulatory requirements for financial institutions operating in Singapore; each institution remains responsible for its own compliance assessment.
+This repository provides comprehensive best practices for financial services development teams — banks, insurers, capital markets firms, payment institutions and other MAS-regulated FIs — implementing AWS Kiro (AI-powered development assistant) in Software Development Life Cycle (SDLC) environments. All guidance is designed to support alignment with MAS regulatory requirements for financial institutions operating in Singapore; each institution remains responsible for its own compliance assessment.
 
 ### What is AWS Kiro?
 
-AWS Kiro is an AI-powered IDE and development assistant that helps developers write, debug, and optimize code. For FSI environments, special security controls are needed to support compliance with financial services regulations.
+AWS Kiro is an AI-powered IDE and development assistant that helps developers write, debug, and optimize code. For financial services environments, special security controls are needed to support compliance with financial services regulations.
 
 ### Why This Guide?
 
@@ -39,7 +41,7 @@ Financial institutions face unique challenges when adopting AI development tools
 - **Data Protection** - Sensitive code and data must remain within controlled environments
 - **Access Control** - Enterprise identity management and MFA requirements
 - **Audit Requirements** - Complete audit trails for all AI-assisted development activities
-- **Network Security** - Private connectivity without internet exposure
+- **Network Security** - No inbound internet exposure and tightly controlled, allowlisted outbound connectivity
 
 This guide addresses these challenges with practical reference implementations (validated by unit tests, cdk-nag and synth; not a substitute for your own testing).
 
@@ -52,17 +54,19 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 | I want to… | Go to |
 |------------|-------|
 | Get running in ~15 minutes (Kiro CLI) | [Quick Start → First 15 minutes](#quick-start) |
-| Lock down the Kiro CLI agent (tool permissions, hooks, file lockdown) — **enforced config security** | [`kiro-docs/agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) |
-| Apply enterprise/registry governance (MCP allow-list, models, web tools, subagents) | [`kiro-docs/security-governance-features.md`](kiro-docs/security-governance-features.md) |
-| Secure the MCP config file (`mcp.json`) | [`kiro-docs/mcp-security.md`](kiro-docs/mcp-security.md) |
+| Deploy the admin policy (deny/ask permission rules, sign-in restriction) — **client-enforced** | [`managed-settings/README.md`](managed-settings/README.md) |
+| Understand the Layer 4 governance model (admin policy, console settings, workspace trust, permissions, hooks, audit) | [`kiro-docs/agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) |
+| Look up permission rules, precedence and Kiro's hardcoded invariants | [`kiro-docs/permissions-and-managed-settings.md`](kiro-docs/permissions-and-managed-settings.md) |
+| Apply Kiro console governance (models, MCP registry, web tools, API keys, Cloud Sessions) and choose approved models | [`kiro-docs/security-governance-features.md`](kiro-docs/security-governance-features.md) |
+| Restrict MCP servers (registry with pinned versions, workspace trust) | [Part 2, Section 5](Kiro-Banking-Best-Practices-Part2.md) and [`kiro-docs/mcp-security.md`](kiro-docs/mcp-security.md) |
 | Set up auth, network & VDI (Sections 1–4) | [`Kiro-Agentic-SDLC-Banking-Best-Practices.md`](Kiro-Agentic-SDLC-Banking-Best-Practices.md) |
 | Go deeper: MCP, SDLC, PDPA, FEAT (Sections 5–14) | [`Kiro-Banking-Best-Practices-Part2.md`](Kiro-Banking-Best-Practices-Part2.md) |
 | Build a MAS-aligned Kiro Skill | [`Banking-Skills-Development-Guide.md`](Banking-Skills-Development-Guide.md) |
-| Use the reference locked-down agent + hooks | [`agent-hooks/`](agent-hooks/) |
+| Install the defense-in-depth hooks and the reference agent | [`agent-hooks/README.md`](agent-hooks/README.md) |
 | Deploy the AWS infrastructure | [`cdk/`](cdk/) |
 | Check MAS TRM coverage | [Compliance Framework](#compliance-framework) |
 
-> **Enforced config-level security** lives mainly in [`agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) (CLI agent runtime); add the enterprise/registry layer from [`security-governance-features.md`](kiro-docs/security-governance-features.md). Everything under `.kiro/steering/` and `.kiro/skills/` is **guidance**, not an enforced boundary.
+> **What Kiro enforces:** the admin rules and sign-in restriction in `managed-settings.json` ([`managed-settings/`](managed-settings/)), the Kiro console settings (model allow list, MCP governance and registry, web tools, API keys, Cloud Sessions), workspace trust and Kiro's hardcoded invariants. User `permissions.yaml`, agent permissions and hooks are **defense in depth**. Everything under `.kiro/steering/` and `.kiro/skills/` is **guidance**, not an enforced boundary. All Kiro controls run on the developer's machine, so a user with local administrator rights can bypass them; the endpoint controls and server-side boundaries (branch protection, IAM, egress allowlist) keep them meaningful.
 
 ---
 
@@ -76,42 +80,48 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 - Session management and timeout policies
 
 ### 🌐 Network Isolation
-- End-to-end VPC architecture with no internet-facing endpoints
-- AWS PrivateLink for private connectivity to Kiro services
+- Private VPC for the WorkSpaces VDI in the workload region (`ap-southeast-1`): no public subnets and no inbound internet-facing endpoints
+- Kiro is reached over HTTPS: AWS PrivateLink to Kiro is available only in the Kiro profile region (`us-east-1` or `eu-central-1`), and sign-in and downloads always use public HTTPS endpoints, which must be allowlisted. See [Part 1, Section 3](Kiro-Agentic-SDLC-Banking-Best-Practices.md#3-network-security-architecture) for the connectivity options
 - Security groups and Network ACLs for defense-in-depth
-- DNS resolution within private network
+- Outbound traffic restricted to an allowlist of Kiro, IAM Identity Center and IdP hostnames (central egress proxy or firewall)
 
 ### 🖥️ Secure Development Environment
 - Amazon WorkSpaces VDI with encryption at rest and in transit
 - Group Policy (GPO) hardening for Windows environments
 - Data Loss Prevention (DLP) agent deployment
-- Centralized MCP configuration management
+- Kiro admin policy (`managed-settings.json`) deployed by GPO or Intune to the official path, read-only for users
 
 ### 🛡️ MCP Server Governance
-- Whitelist-based MCP server approval process
-- Centrally managed configuration preventing developer modifications
-- Approved MCP servers for banking use cases
-- Audit logging of all MCP tool usage
+- Kiro MCP governance: MCP toggle and MCP Registry URL in the Kiro console; only servers listed in the registry load
+- Registry entries pin exact versions (Kiro rejects version ranges; never use `latest`); clients re-fetch the registry at startup and every 24 hours
+- Client-enforced for IAM Identity Center and API-key users in the IDE and CLI (not Kiro Web); MCP is disabled if the client cannot reach the governance API
+- Workspace trust keeps the MCP configuration of unknown repositories from loading
+- Approved MCP servers for banking use cases, each with a change record
+- The registry controls which servers run, not what they connect to: the AWS Documentation server, for example, needs AWS documentation hosts on the egress allowlist, or use a remote endpoint instead
+- MCP tools run on the client, so tool calls are recorded by a `PostToolUse` hook, not by CloudTrail
 
 ### 📊 Compliance & Audit
-- CloudTrail logging for all Kiro activities
+- Kiro prompt logging and user activity reports (S3 in the Kiro profile region), plus CloudTrail for AWS account activity
 - CloudWatch monitoring and alerting
 - Automated compliance validation scripts
 - MAS TRM Guidelines mapping
 
-### 🤖 Agent Runtime Governance
-- Locked default agent: least-privilege `tools`/`allowedTools`, `toolsSettings` deny rules (`denyByDefault`, denied paths/commands)
-- Fail-closed `preToolUse` hooks: PII/secret guard, git policy guard, destructive-filesystem guard
-- Tamper-evident (hash-chained) tool-use audit; declarative `denyByDefault` as the primary control
+### 🤖 Agent Runtime Governance (Layer 4)
+- **Admin policy:** `managed-settings.json` deployed by MDM or GPO to the official path, with `deny` / `ask` permission rules (force pushes, history rewrites, destructive commands, credential reads, `git push` and deploy commands) and the sign-in restriction ([`managed-settings/`](managed-settings/))
+- **Kiro console settings:** model allow list (experimental and preview models excluded by default), MCP governance with a version-pinned registry, web tools, API keys and Cloud Sessions off, prompt logging on
+- **Workspace trust** for unknown repositories; user `permissions.yaml` and the reference agent's `permissions` are convenience layers that can never weaken an admin rule (deny wins)
+- **Hooks** as defense in depth: secret/PII scanning of tool input, git and destructive-command guards, which block with exit code 2 ([`agent-hooks/README.md`](agent-hooks/README.md))
+- **Audit:** Kiro prompt logging and user activity reports; the local hook audit log is supplementary, not tamper-proof
+- These controls are enforced by the Kiro client: a user with local administrator rights can bypass them
 
 ### 🔒 Endpoint Enforcement (MDM) & Defense-in-Depth
-- Immutable, append-only, self-healing control files across Windows/macOS/Linux/VDI (`chattr`/`chflags`/`icacls` via MDM)
-- Application allow-listing + non-privileged developers; server-side branch protection / IAM as the authoritative boundary
-- Zero Trust: vendor "built-in" protections treated as unverifiable backstops, not the boundary
+- MDM or GPO deploys the managed files (`managed-settings.json`, global hooks) to Windows, macOS, Linux and VDI, keeps them read-only for standard users and reports drift
+- Non-privileged developers and application allow-listing: without them, the client-side Kiro controls can be removed
+- Authoritative boundaries are server-side: branch protection and CODEOWNERS, least-privilege IAM, the egress allowlist and subscription management
 
 ### 🧪 Adversarial Validation
-- Chaos / penetration harness: non-privileged human and Kiro agent vs the controls
-- Reproducible, hash-chained, sanitized evidence (`kiro-docs/chaos-pentest-evidence.md`)
+- Chaos / penetration harness: a non-privileged user and the Kiro agent try to bypass the controls (for example with quoted or indirect shell commands that glob rules miss)
+- Sanitized evidence in [`kiro-docs/chaos-pentest-evidence.md`](kiro-docs/chaos-pentest-evidence.md); re-run after each Kiro upgrade, because permission and hook behaviour changes between releases
 
 ---
 
@@ -125,8 +135,10 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 | **[Kiro-Agentic-SDLC-Banking-Best-Practices.md](Kiro-Agentic-SDLC-Banking-Best-Practices.md)** | Comprehensive implementation guide (Sections 1-4) | ✅ Complete |
 | **[Kiro-Banking-Best-Practices-Part2.md](Kiro-Banking-Best-Practices-Part2.md)** | Extended guidance (Sections 5-14) incl. PDPA, Outsourcing, AI/ML, ABS | ✅ Complete |
 | **[Banking-Skills-Development-Guide.md](Banking-Skills-Development-Guide.md)** | How to build MAS-aligned Kiro Skills for banking | ✅ Complete |
-| **[kiro-docs/agent-runtime-governance.md](kiro-docs/agent-runtime-governance.md)** | Agent runtime governance: tool permissions, hooks, tamper-evident audit | ✅ Complete |
-| **[kiro-docs/mdm-endpoint-enforcement.md](kiro-docs/mdm-endpoint-enforcement.md)** | MDM-managed, immutable, self-healing global hooks/steering/agent across clients | ✅ Complete |
+| **[managed-settings/](managed-settings/README.md)** | Admin policy (`managed-settings.json` for Option A and Option B), user `permissions.yaml` template and MCP registry example, with deployment and validation steps | ✅ Complete |
+| **[agent-hooks/README.md](agent-hooks/README.md)** | Defense-in-depth hooks (secret/PII, git and destructive-command guards, audit) and the reference agent: installation, exit codes, tests | ✅ Complete |
+| **[kiro-docs/agent-runtime-governance.md](kiro-docs/agent-runtime-governance.md)** | Layer 4 governance model: admin policy, console settings, workspace trust, permissions, hooks, audit | ✅ Complete |
+| **[kiro-docs/mdm-endpoint-enforcement.md](kiro-docs/mdm-endpoint-enforcement.md)** | MDM deployment and drift detection for `managed-settings.json` and global hooks across Windows, macOS, Linux and VDI | ✅ Complete |
 | **[kiro-docs/mdm-test-evidence.md](kiro-docs/mdm-test-evidence.md)** | Sanitized Windows/macOS/Linux lockdown test results | ✅ Complete |
 | **[kiro-docs/chaos-pentest-evidence.md](kiro-docs/chaos-pentest-evidence.md)** | Chaos/pentest: non-privileged human + agent vs controls (findings + recommendations) | ✅ Complete |
 | **[SECURITY.md](SECURITY.md)** | Security vulnerability reporting policy | ✅ Complete |
@@ -162,11 +174,14 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 
 ### Architecture Diagrams
 
+The diagrams are Mermaid blocks in this README, so they render on GitHub and are kept in sync with the text.
+
 | Diagram | Description |
 |---------|-------------|
-| **[diagrams/architecture-option-a.png](diagrams/architecture-option-a.png)** | Option A: Via IAM Identity Center |
-| **[diagrams/architecture-option-b.png](diagrams/architecture-option-b.png)** | Option B: Direct IdP Federation |
-| **[diagrams/security-layers.png](diagrams/security-layers.png)** | This guide's 5-layer security model |
+| **[Option A](#option-a-via-aws-iam-identity-center-default)** | Via IAM Identity Center |
+| **[Option B](#option-b-direct-idp-federation-no-iam-identity-center)** | Direct IdP Federation |
+| **[Security Layers](#security-layers)** | This guide's 5-layer security model |
+| **[diagrams/generate_diagrams.py](diagrams/generate_diagrams.py)** | Optional PNG export of the same three diagrams (Python `diagrams` package + Graphviz) |
 
 ### Technical Reference (Kiro Platform Docs)
 
@@ -179,7 +194,12 @@ Local snapshots of Kiro platform documentation for offline/air-gapped environmen
 | **[kiro-docs/mcp-servers.md](kiro-docs/mcp-servers.md)** | Available MCP servers reference |
 | **[kiro-docs/mcp-usage.md](kiro-docs/mcp-usage.md)** | MCP usage patterns and examples |
 | **[kiro-docs/privacy-and-security.md](kiro-docs/privacy-and-security.md)** | Privacy and security guidelines |
-| **[kiro-docs/security-governance-features.md](kiro-docs/security-governance-features.md)** | Consolidated Kiro security & governance feature reference (CLI + IDE/General), mapped to MAS TRM |
+| **[kiro-docs/permissions-and-managed-settings.md](kiro-docs/permissions-and-managed-settings.md)** | Permissions (`permissions.yaml`), admin policy (`managed-settings.json`), sign-in controls, workspace trust, hooks and custom agents (Kiro 1.x) |
+| **[kiro-docs/security-governance-features.md](kiro-docs/security-governance-features.md)** | Consolidated Kiro security & governance feature reference (CLI + IDE/General) with a model approval matrix, mapped to MAS TRM |
+| **[kiro-docs/powers.md](kiro-docs/powers.md)** | Kiro Powers (dynamic MCP context loading) |
+| **[kiro-docs/skills-cli.md](kiro-docs/skills-cli.md)** | Agent Skills in the Kiro CLI |
+| **[kiro-docs/skills-ide.md](kiro-docs/skills-ide.md)** | Agent Skills in the Kiro IDE |
+| **[kiro-docs/anthropic-skills-reference.md](kiro-docs/anthropic-skills-reference.md)** | Anthropic's public skills repository, as a reference implementation of the Agent Skills standard |
 
 ### Regulatory Frameworks
 
@@ -203,8 +223,8 @@ Fast path for first-time users (full prerequisites are below).
 # 1. Install Kiro CLI — see https://kiro.dev/docs/cli/
 
 # 2. Clone and enter the repo
-git clone https://github.com/timwukp/kiro-banking-best-practices.git
-cd kiro-banking-best-practices
+git clone https://github.com/timwukp/kiro-fsi-best-practices.git
+cd kiro-fsi-best-practices
 
 # 3. Validate the reference locked-down agent
 kiro-cli agent validate --path agent-hooks/banking-secure.agent.json
@@ -214,7 +234,7 @@ kiro-cli agent validate --path agent-hooks/banking-secure.agent.json
 bash agent-hooks/tests/run-tests.sh      # expect: FAIL=0
 ```
 
-**Next:** read [`kiro-docs/agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) to deploy the hooks and set `banking-secure` as your default agent, then [Security Architecture](#security-architecture).
+**Next:** deploy the admin policy from [`managed-settings/README.md`](managed-settings/README.md), install the hooks from [`agent-hooks/README.md`](agent-hooks/README.md), read [`kiro-docs/agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) for how the layers fit together, then [Security Architecture](#security-architecture).
 
 ### Prerequisites
 
@@ -222,7 +242,7 @@ Before implementing Kiro in your banking environment, ensure you have:
 
 - ✅ AWS Organization with IAM Identity Center enabled
 - ✅ Enterprise IdP (Azure AD, Okta, Ping Identity) with SAML 2.0 support
-- ✅ Corporate VPC with private subnets configured
+- ✅ Corporate VPC with private subnets configured, plus an allowlisted HTTPS egress path for Kiro (see Part 1, Section 3)
 - ✅ Amazon WorkSpaces directory set up
 - ✅ DLP solution deployed (Symantec, McAfee, Microsoft Purview, or Forcepoint)
 - ✅ CloudTrail enabled for audit logging
@@ -240,11 +260,11 @@ region/account; your change-management cadence.
 | Workstream | Prerequisite | Technical effort* | Exit criterion (objective evidence) |
 |------------|--------------|-------------------|-------------------------------------|
 | Identity & access (IdP + SCIM + MFA) | IdP admin, IAM Identity Center | ~0.5–1 d | Test user auto-provisioned via SCIM; MFA enforced; social / Builder ID blocked |
-| Network isolation (VPC endpoints, SG/NACL, private DNS) | VPC + subnets | ~0.5–1 d | `cdk synth` clean; VDI connectivity test passes; no public endpoint |
-| Secure VDI (WorkSpaces + GPO/DLP) | Directory service | ~1–2 d | Encrypted WorkSpace launches; protected paths / trusted commands enforced |
-| MCP governance | approved-server list | ~0.5 d | Registry allow-list active; `mcp.json` read-only to developer (permission check) |
+| Network isolation (VPC endpoints, SG/NACL, egress allowlist) | VPC + subnets; egress path | ~0.5–1 d | `cdk synth` clean; VDI reaches Kiro only through the allowlisted egress path; no inbound public endpoint |
+| Secure VDI (WorkSpaces + GPO/DLP) | Directory service | ~1–2 d | Encrypted WorkSpace launches; developers have no local admin rights; `managed-settings.json` is present, valid and read-only for users, and a test `git push --force` by the agent is denied with the source "administration" |
+| MCP governance | approved-server list | ~0.5 d | MCP Registry URL set in the Kiro console; every entry pins an exact version; a server that is not in the registry stays hidden even when added to `mcp.json` |
 | Agent runtime + endpoint enforcement | golden image | ~0.5–1 d | `agent-hooks/tests/run-tests.sh` + `mdm/tests/test-lockdown.sh` green; chaos harness = 0 unexpected bypass |
-| Monitoring & compliance | CloudTrail / CloudWatch | ~0.5 d | Audit shipped off-box; test alarm fires; MAS TRM mapping reviewed |
+| Monitoring & compliance | CloudTrail / CloudWatch | ~0.5 d | Prompt logs and user activity reports arrive in S3 (profile region) and the SIEM; test alarm fires; MAS TRM mapping reviewed |
 
 \* Hands-on time assuming the prerequisite already exists.
 
@@ -289,7 +309,42 @@ This guide supports two architecture options depending on your organization's id
 
 Enterprise IdP federates through IAM Identity Center, which centrally manages access to both Kiro subscriptions and WorkSpaces. This is the traditional approach and provides unified access management across all AWS services.
 
-![Option A Architecture](diagrams/architecture-option-a.png)
+```mermaid
+flowchart TB
+    idp["Enterprise IdP<br>Entra ID or Okta, MFA"]
+    dev["Developer"]
+    subs["Kiro subscription<br>assigned in the Kiro console"]
+
+    subgraph idreg["Identity region, e.g. ap-southeast-1"]
+        idc["IAM Identity Center"]
+    end
+
+    subgraph wl["Workload account, ap-southeast-1"]
+        subgraph vpc["Private VPC: no public subnets, no inbound access"]
+            vdi["WorkSpaces VDI<br>Kiro IDE and CLI, DLP, GPO"]
+            policy["Admin policy<br>managed-settings.json on the VDI image"]
+            awsep["AWS service endpoints<br>logs, kms, sts, s3"]
+        end
+        egress["Allowlisted HTTPS egress<br>sign-in, downloads, Kiro APIs"]
+        mon["CloudTrail, CloudWatch,<br>GuardDuty, AWS Config"]
+    end
+
+    subgraph prof["Kiro profile region: us-east-1 or eu-central-1"]
+        kiro["Kiro service<br>stores and processes prompts and code context"]
+        plogs["S3: prompt logs and<br>user activity reports"]
+    end
+
+    idp -->|"SAML 2.0 + SCIM"| idc
+    idc -->|"users and groups"| subs
+    subs --> kiro
+    dev --> vdi
+    policy -.->|"enforced by the Kiro client"| vdi
+    vdi --> awsep
+    awsep --> mon
+    vdi --> egress
+    egress -->|"HTTPS 443"| kiro
+    kiro --> plogs
+```
 
 ### Option B: Direct IdP Federation (No IAM Identity Center)
 
@@ -297,7 +352,38 @@ Since [Kiro v0.9.40](https://kiro.dev/changelog/ide/external-identity-provider-s
 
 This option removes IAM Identity Center entirely, simplifying the architecture for organizations that prefer direct IdP integration.
 
-![Option B Architecture](diagrams/architecture-option-b.png)
+```mermaid
+flowchart TB
+    idp["Enterprise IdP<br>Okta or Entra ID, MFA"]
+    dev["Developer"]
+
+    subgraph wl["Workload account, ap-southeast-1"]
+        ds["AWS Directory Service<br>Managed AD, Simple AD or AD Connector"]
+        subgraph vpc["Private VPC: no public subnets, no inbound access"]
+            vdi["WorkSpaces VDI<br>Kiro IDE and CLI, DLP, GPO"]
+            policy["Admin policy<br>managed-settings.json, Option B file"]
+            awsep["AWS service endpoints<br>logs, kms, sts, s3"]
+        end
+        egress["Allowlisted HTTPS egress<br>IdP sign-in, downloads, Kiro APIs"]
+        mon["CloudTrail, CloudWatch,<br>GuardDuty, AWS Config"]
+    end
+
+    subgraph prof["Kiro profile region: us-east-1 or eu-central-1"]
+        kiro["Kiro service<br>stores and processes prompts and code context"]
+        plogs["S3: prompt logs and<br>user activity reports"]
+    end
+
+    idp -->|"OIDC + SCIM"| kiro
+    idp -->|"SAML 2.0"| vdi
+    ds -->|"WorkSpaces directory"| vdi
+    dev --> vdi
+    policy -.->|"enforced by the Kiro client"| vdi
+    vdi --> awsep
+    awsep --> mon
+    vdi --> egress
+    egress -->|"HTTPS 443"| kiro
+    kiro --> plogs
+```
 
 **Option B Requirements:**
 - Kiro: Create OIDC + SAML apps in your IdP, configure SCIM provisioning, verify company domain via DNS ([Okta setup](https://kiro.dev/docs/enterprise/identity-provider/okta/))
@@ -311,17 +397,52 @@ This option removes IAM Identity Center entirely, simplifying the architecture f
 
 ### Security Layers
 
-Both architectures share the same 5-layer security model:
+Both architectures share this guide's 5-layer security model. The layers are this guide's own structure, not a model defined by MAS; the TRM references show which MAS TRM Guidelines sections each layer supports.
 
-![MAS TRM Security Layers](diagrams/security-layers.png)
+```mermaid
+flowchart TB
+    dev["Banking developer"]
 
-1. **Identity Layer** - Enterprise IdP + MFA (via IAM Identity Center or direct federation)
-2. **Network Layer** - VPC + PrivateLink + Security Groups
-3. **Endpoint Layer** - WorkSpaces VDI + DLP + GPO
-4. **Application Layer** - MCP Governance + Centralized Configuration + [Agent Runtime Governance](kiro-docs/agent-runtime-governance.md)
-5. **Audit Layer** - CloudTrail + CloudWatch + Compliance Validation (incl. agent tool-use audit log via `postToolUse` hook)
+    subgraph layer1["Layer 1: Identity - TRM 9.1, 9.2"]
+        l1["Enterprise IdP with MFA and SCIM<br>via IAM Identity Center or direct federation"]
+    end
 
-> **Where to configure enforced security:** start with [`kiro-docs/agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) (Layer 4 runtime controls — tool permissions, hooks, OS-level file lockdown); see [`kiro-docs/security-governance-features.md`](kiro-docs/security-governance-features.md) for the enterprise/registry governance layer.
+    subgraph layer2["Layer 2: Network - TRM 11.2"]
+        l2["Private VPC, security groups, NACLs<br>AWS service endpoints, allowlisted HTTPS egress"]
+    end
+
+    subgraph layer3["Layer 3: Endpoint and VDI - TRM 9.3, 11.3, 11.4"]
+        l3["WorkSpaces VDI, DLP, GPO hardening<br>no local administrator rights"]
+    end
+
+    subgraph layer4["Layer 4: Application and agent runtime - TRM 3.4, 6.1, 6.3"]
+        l4["Admin policy managed-settings.json, permissions<br>hooks, MCP registry, workspace trust"]
+    end
+
+    subgraph layer5["Layer 5: Audit and monitoring - TRM 12.2, evidence for 15.1 IT audit"]
+        l5["Kiro prompt logs and user activity reports<br>CloudTrail, CloudWatch, GuardDuty, AWS Config"]
+    end
+
+    kiro["Kiro service in the profile region"]
+
+    dev --> l1
+    l1 --> l2
+    l2 --> l3
+    l3 --> l4
+    l4 --> kiro
+    l4 -.->|"hook audit log"| l5
+    kiro -.->|"prompt logs"| l5
+```
+
+> The diagrams above are Mermaid and render on GitHub. To export PNGs instead, run [`diagrams/generate_diagrams.py`](diagrams/generate_diagrams.py) (optional; needs the Python `diagrams` package and Graphviz).
+
+1. **Identity Layer** (TRM 9.1, 9.2) - Enterprise IdP + MFA (via IAM Identity Center or direct federation)
+2. **Network Layer** (TRM 11.2) - VPC + Security Groups + allowlisted egress (PrivateLink to Kiro only in the profile region)
+3. **Endpoint Layer** (TRM 9.3, 11.3, 11.4) - WorkSpaces VDI + DLP + GPO
+4. **Application Layer** (TRM 3.4, 6.1, 6.3) - Kiro admin policy (`managed-settings.json`) + Kiro console governance (models, MCP registry, web tools) + workspace trust + hooks ([Agent Runtime Governance](kiro-docs/agent-runtime-governance.md))
+5. **Audit Layer** (TRM 12.2; evidence for 15.1 IT audit) - Kiro prompt logging + user activity reports + CloudTrail + CloudWatch + Compliance Validation (the local `PostToolUse` hook audit log is supplementary)
+
+> **Where to configure Layer 4:** deploy the admin policy from [`managed-settings/README.md`](managed-settings/README.md), set the Kiro console settings described in [`kiro-docs/security-governance-features.md`](kiro-docs/security-governance-features.md), and add the hooks from [`agent-hooks/README.md`](agent-hooks/README.md). [`kiro-docs/agent-runtime-governance.md`](kiro-docs/agent-runtime-governance.md) explains how the layers fit together.
 
 ---
 
@@ -369,14 +490,14 @@ The MAS TRM Guidelines apply to all MAS-regulated financial institutions, includ
 | MAS Section | Control Area | Implementation | Document Reference |
 |-------------|--------------|----------------|-------------------|
 | **3.4** | Management of Third Party Services | Kiro, MCP servers and model providers assessed as third-party services; outsourcing assessment (Notice 658 / Guidelines on Outsourcing) | Section 5, Section 12 |
-| **5.4** | SDLC and Security-by-Design | Supervised mode + Skills | Section 6 |
+| **5.4** | SDLC and Security-by-Design | Admin permission rules + Supervised autonomy; Skills and steering as guidance | Section 6 |
 | **6.1, 6.3** | Secure Coding and Source Code Review; DevSecOps | Human review and testing of AI-generated and third-party code before integration (6.1.3), SAST/DAST (Annex A), segregation of duties and human approval before merge | Section 6 |
 | **9.1** | User Access Management | IAM IDC + Enterprise IdP; MFA + Session Management | Section 2, Section 2.1.3 |
 | **9.2** | Privileged Access Management | MFA for administrative access (banks: Notice FSM-N06 paras 4.1, 4.6) | Section 2.1.3 |
-| **9.3** | Remote Access Management | WorkSpaces VDI over VPC + PrivateLink | Section 3, Section 4 |
+| **9.3** | Remote Access Management | WorkSpaces VDI in a private VPC with allowlisted egress | Section 3, Section 4 |
 | **10.1, 10.2** | Cryptographic Algorithm and Protocol; Key Management | TLS 1.2+; KMS customer-managed keys with rotation | Section 7 |
 | **11.1** | Data Security | DLP + Encryption + PDPA | Section 4.1.3, Section 11 |
-| **11.2** | Network Security | VPC Endpoints + Security Groups | Section 3.2 |
+| **11.2** | Network Security | VPC Endpoints + Security Groups + egress allowlist | Section 3.2 |
 | **11.3, 11.4** | System Security; Virtualisation Security | Hardened WorkSpaces images + GPO | Section 4 |
 | **12.2** | Cyber Event Monitoring and Detection | CloudTrail + CloudWatch monitoring | Section 8 |
 | **12.3** | Cyber Incident Response and Management | Escalation matrix + MAS notification (banks: Notice FSM-N05 paras 7–8) | Section 10 |
@@ -385,14 +506,14 @@ The MAS TRM Guidelines apply to all MAS-regulated financial institutions, includ
 
 ### Key Compliance Controls
 
-- ✅ **Zero Trust Architecture** - No internet-facing endpoints, all traffic through VPC PrivateLink
+- ✅ **Zero Trust Architecture** - No inbound internet-facing endpoints; Kiro traffic leaves only through an allowlisted HTTPS egress path. PrivateLink to Kiro exists only in the Kiro profile region, and sign-in and downloads use public HTTPS (see [Part 1, Section 3](Kiro-Agentic-SDLC-Banking-Best-Practices.md#3-network-security-architecture))
 - ✅ **MFA Enforcement** - Required for all user access via Enterprise IdP (TRM 9.1–9.2; banks: Notice FSM-N06 para 4.6)
 - ✅ **Least Privilege** - IAM policies grant minimum required permissions
 - ✅ **Encryption** - Data encrypted at rest (KMS) and in transit (TLS 1.2+)
 - ✅ **Audit Trails** - CloudTrail logging (TRM 12.2); 90-day minimum retention is an example institutional policy (not prescribed by MAS TRM)
-- ✅ **Data Location Governance** - Kiro operates from supported profile regions (us-east-1, eu-central-1); prompt logs and user activity reports are stored in the profile region per AWS requirements. MAS TRM does not mandate data localisation — residency preferences are customer-driven. For organizations requiring regional log copies, S3 Cross-Region Replication (CRR) to ap-southeast-1 is available as a complementary control
+- ✅ **Data Location Governance** - Identity can stay in Singapore (IAM Identity Center in ap-southeast-1), but Kiro stores and processes prompts, code context and responses in its profile region (us-east-1 or eu-central-1; there is no Singapore option) and may process them in other regions of the same geography; Global-scope models (currently GPT-5.6 Sol, Terra and Luna) may be processed in AWS Regions worldwide, while Geography-scope models, including all Claude models, stay within the geography. Prompt logs and user activity reports are stored in the profile region per AWS requirements. MAS TRM does not mandate data localisation — residency preferences are customer-driven. Treat Kiro use as a cross-border transfer (PDPA Transfer Limitation Obligation, s26; Part 2, Section 11), keep customer data out of prompts, and exclude Global-scope models with the model allow list. For organizations requiring regional log copies, S3 Cross-Region Replication (CRR) to ap-southeast-1 is available as a complementary control (Part 2, Section 7.2)
 - ✅ **DLP Controls** - Prevent code exfiltration and credential exposure
-- ✅ **MCP Governance** - Centrally managed whitelist, no developer modifications
+- ✅ **MCP Governance** - Kiro MCP registry with exact pinned versions (client-enforced); unlisted servers stay hidden
 - ✅ **PDPA Alignment** - Data classification, DLP rules for personal data, breach notification
 - ✅ **AI Governance** - MAS AI Risk Management Guidelines (2026): assess Kiro's materiality (coding assistants are not among the basic-tier examples); FEAT principles applied by analogy; human accountability for AI-generated code
 - ✅ **Outsourcing Risk** - Materiality assessment, due diligence, exit strategy, concentration risk management (TRM 3.4; Notice 658 and Guidelines on Outsourcing)
@@ -404,9 +525,9 @@ The MAS TRM Guidelines apply to all MAS-regulated financial institutions, includ
 
 This documentation is designed for:
 
-- **Banking Developers** - Implementing Kiro in daily SDLC workflows
+- **FSI Developers** - Banks, insurers, capital markets and payment institutions implementing Kiro in daily SDLC workflows (the reference implementation is banking-focused; see [Applicability Across MAS-Regulated Financial Institutions](#applicability-across-mas-regulated-financial-institutions))
 - **Security Architects** - Designing secure AI development environments
-- **Compliance Officers** - Validating MAS regulatory compliance
+- **Compliance Officers** - Assessing alignment with MAS requirements
 - **Cloud Operations Teams** - Deploying and managing Kiro infrastructure
 - **Development Team Leads** - Establishing secure development practices
 - **IT Auditors** - Reviewing security controls and audit trails
@@ -442,18 +563,20 @@ This documentation is provided for informational and educational purposes only. 
 
 ## Approved MCP Servers for Banking
 
+Approval means an entry in the Kiro MCP registry with an exact, reviewed version (Kiro rejects version ranges; never use `latest`) and a change record; an upgrade is a new review. See [Part 2, Section 5](Kiro-Banking-Best-Practices-Part2.md) and [`managed-settings/mcp-registry.example.json`](managed-settings/mcp-registry.example.json).
+
 ### Tier 1: Pre-Approved (No Additional Review)
-- **AWS Documentation** - Official AWS docs access
-- **Git** - Repository operations (read-only recommended)
-- **Filesystem** - Controlled directory access
+- **AWS Documentation** - Official AWS docs access. The local server (`uvx`) is installed from PyPI (or an internal package mirror) and fetches pages from AWS documentation hosts on the internet, so it needs those hosts on the egress allowlist; the alternative is a remote endpoint such as the AWS Knowledge MCP Server (`https://knowledge-mcp.global.api.aws`), which needs egress to that host instead
+- **Git** - Repository operations (read-only recommended; deny the write tools with an admin `mcp` rule)
 
 ### Tier 2: Conditional Approval (Security Review Required)
 - **GitHub** - With token scope restrictions
 - **Docker** - For containerized builds
 - **Kubernetes** - For deployment automation
+- **Filesystem** - Kiro's built-in file tools usually suffice; an MCP filesystem server is governed only by `mcp` rules, so it bypasses the `fs_read` / `fs_write` deny rules
 
 ### Tier 3: Prohibited
-- **Web Search** - External data leakage risk
+- **Web Search** - External data leakage risk (also turn off Kiro's built-in web tools in the Kiro console, or set `web_fetch` / `web_search` to `ask` in the admin policy)
 - **Browser** - Uncontrolled web access
 - **Custom/Unverified** - Unknown security posture
 
@@ -515,15 +638,16 @@ For questions, issues, or feedback:
 | 1.0 | 2026-02-25 | Initial release (Sections 1-4) |
 | 1.1 | 2026-02-26 | Complete sections 5-10, add README |
 | 1.2 | 2026-02-28 | Regulatory enhancement: PDPA, Outsourcing, AI/ML, ABS guidelines |
-| 1.3 | 2026-02-28 | AWS CDK infrastructure modules (4 stacks) |
+| 1.3 | 2026-02-28 | AWS CDK infrastructure modules (4 stacks at the time; BackupStack added on 2026-05-17 makes 5) |
 | 1.4 | 2026-02-28 | Working Kiro Skills (3 skills) + GitHub Actions CI/CD |
 | 1.5 | 2026-03-11 | Add Option B: Direct IdP federation architecture (no IAM IDC), fix CDK compilation and tests |
 | 1.6 | 2026-03-11 | Architecture diagrams (PNG), SECURITY.md, steering samples, README consolidation, kiro-docs tracking |
 | 1.7 | 2026-06-04 | Agent Runtime Governance (Layer 4 hooks/agent/audit), security-governance-features reference, CI fixes, AGENTS.md + Kiro-targeting refactor + steering map, QUICK-REFERENCE rename |
-| 1.8 | 2026-06-05 | Agent runtime governance, MDM endpoint enforcement, chaos/pentest, Key Features update |
+| 1.8 | 2026-06-05 | MDM endpoint enforcement (`mdm/`), `destructive-fs-guard` hook, chaos/pentest harness and evidence, Key Features update (later corrected in 1.9) |
+| 1.9 | 2026-10-09 | Repository renamed to `kiro-fsi-best-practices`. Correction release: MAS regulatory citations (TRM remap, FSM-N05 1 h / 14 days, Notice 658, AI Risk Management Guidelines), data location (no Singapore profile region) and allowlisted egress, Kiro 1.x governance (`managed-settings/`, fail-closed hooks), CDK hardening (5 stacks, 19 Config rules, 86 tests), tested PII patterns, Mermaid diagrams, CI on Node.js 22 |
 
 ---
 
-**Version:** 1.8
-**Last Updated:** June 5, 2026
+**Version:** 1.9
+**Last Updated:** October 9, 2026
 **Maintained By:** Security Architecture Team

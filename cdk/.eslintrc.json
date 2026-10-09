@@ -14,5 +14,5 @@
     "@typescript-eslint/no-unused-vars": "warn",
     "@typescript-eslint/explicit-function-return-type": "off"
   },
-  "ignorePatterns": ["node_modules", "cdk.out", "*.js"]
+  "ignorePatterns": ["node_modules/", "cdk.out/", "build/", "*.js"]
 }

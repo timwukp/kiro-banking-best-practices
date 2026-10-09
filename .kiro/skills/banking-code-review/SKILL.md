@@ -1,9 +1,9 @@
 ---
 name: banking-code-review
-description: Conduct code reviews following Singapore banking security standards, MAS TRM guidelines, and PDPA requirements. Use when reviewing pull requests, preparing code for deployment, conducting security audits, or validating banking application code quality.
+description: Review application source code and pull requests against Singapore banking secure-coding standards (OWASP Top 10, injection, IDOR and access control, authentication and sessions, cryptography, hardcoded secrets, logging, error handling, transaction integrity and race conditions) and recommend approve or request changes against the approval criteria. Use when asked to review this code for banking standards, do a code review of this pull request, check whether this code is ready for production, do a security review of this change, check this PR against banking guidelines, or review AI-generated code before merge. Not for mapping infrastructure or controls to MAS TRM sections, MAS notices or PDPA obligations, or for audit preparation (use mas-compliance-review), and not for scanning or masking PII and secrets on their own (use pii-detection).
 metadata:
   author: Development Standards Team
-  version: 1.0.0
+  version: 1.1.0
   regulations: MAS TRM, PDPA, MAS Guidelines on Artificial Intelligence Risk Management
 ---
 
@@ -13,13 +13,16 @@ metadata:
 
 Structured code review process for Singapore banking applications, ensuring security, compliance, and quality standards are met before code is merged or deployed.
 
-## Activation Triggers
+## Scope and related skills
 
-- "Review this code for banking standards"
-- "Code review for this pull request"
-- "Is this code ready for production?"
-- "Security review of this change"
-- "Check this PR against banking guidelines"
+- **This skill:** application code review, covering:
+  - secure coding and OWASP Top 10 risks;
+  - banking transaction logic;
+  - AI-generated code;
+  - a recommended verdict against the approval criteria below.
+- **mas-compliance-review:** use it to map controls or infrastructure-as-code (CDK, CloudFormation, Terraform) to MAS TRM sections, MAS notices and PDPA obligations, or to prepare audit evidence. This review cites TRM sections for each check, but leaves the regulatory mapping and IaC review to that skill.
+- **pii-detection:** the approval criteria call for a clean PII and secrets scan. Use that skill for it, and for masking or redacting any value found.
+- The verdict is a recommendation. Humans approve and merge under branch protection; never approve, merge or push to `main` on the user's behalf.
 
 ## Review Checklist
 
@@ -33,7 +36,7 @@ When reviewing code, check each category in order:
 - [ ] SQL injection prevention (parameterized queries only)
 - [ ] XSS prevention (output encoding/escaping)
 - [ ] CSRF protection on state-changing endpoints
-- [ ] No use of deprecated crypto (MD5, SHA-1, DES, RC4) (TRM 10.1)
+- [ ] No use of deprecated crypto (MD5, SHA-1, DES, 3DES, RC4) (TRM 10.1)
 - [ ] Secure random number generation for tokens/keys
 
 ### 2. Access Control (MAS TRM Section 9)
@@ -50,7 +53,7 @@ When reviewing code, check each category in order:
 ### 3. Data Protection (MAS TRM 11.1 + PDPA)
 
 - [ ] PII encrypted at rest (KMS) and in transit (TLS)
-- [ ] No PII in logs, error messages, or stack traces
+- [ ] No PII in logs, error messages, or stack traces; where a value must be shown, it is masked (NRIC/FIN `S****567D`; card and account numbers: last 4 digits)
 - [ ] Data retention policy enforced in code
 - [ ] Secure deletion when data no longer needed
 - [ ] PDPA consent checks before data collection
@@ -109,8 +112,18 @@ account = Account.objects.get(id=request.GET['account_id'], user=request.user)
 def login():
     return authenticate(request.json)
 
-# PASS - Rate limited
+# PASS - Rate limited (Flask-Limiter 3.x)
+from flask import Flask, request
 from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+app = Flask(__name__)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    storage_uri="redis://ratelimit.internal:6379",  # shared store, so the limit holds across instances
+)
+
 @app.route('/login', methods=['POST'])
 @limiter.limit("5 per minute")
 def login():
@@ -123,20 +136,23 @@ def login():
 DATABASE_URL = "postgresql://admin:password123@db.internal:5432/banking"
 
 # PASS - Secrets Manager
+import json
 import boto3
+
 secret = boto3.client('secretsmanager', region_name='ap-southeast-1')
 db_creds = json.loads(secret.get_secret_value(SecretId='/banking/db')['SecretString'])
 ```
 
 ## Approval Criteria
 
-Code can be approved when:
+Recommend APPROVE only when:
 - All CRITICAL security checks passed
 - No unresolved high-severity findings
 - MAS TRM alignment checks passed (see the checklist above)
-- Minimum 2 human reviewers approved
 - All automated tests passing
-- PII detection scan clean
+- PII detection scan clean (pii-detection skill)
+
+Then remind the user that the change still needs the human approvals required by branch protection (the number of reviewers is set by institutional policy) before it is merged. Kiro does not approve, merge or push to `main`.
 
 ## Output Format
 
@@ -146,7 +162,8 @@ Date: {date}
 PR: #{pr_number}
 Reviewer: Kiro (AI-assisted) + {human_reviewer}
 
-## Verdict: {APPROVE / REQUEST_CHANGES / NEEDS_DISCUSSION}
+## Recommended verdict: {APPROVE / REQUEST_CHANGES / NEEDS_DISCUSSION}
+(Recommendation only; merge requires the human approvals set by branch protection.)
 
 ## Security: {pass_count}/{total_count} checks passed
 ## Data Protection: {pass_count}/{total_count} checks passed

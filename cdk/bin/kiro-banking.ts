@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { Aspects } from 'aws-cdk-lib';
 import { AwsSolutionsChecks } from 'cdk-nag';
@@ -9,13 +8,48 @@ import { EncryptionStack } from '../lib/stacks/encryption-stack';
 import { MonitoringStack } from '../lib/stacks/monitoring-stack';
 import { ComplianceStack } from '../lib/stacks/compliance-stack';
 import { BackupStack } from '../lib/stacks/backup-stack';
-import { prodConfig, devConfig } from '../config/environments';
+import { prodConfig, devConfig, EGRESS_MODES, EgressMode, KiroBankingConfig } from '../config/environments';
 
 const app = new cdk.App();
 
 // Select environment from context or default to dev
 const envName = app.node.tryGetContext('env') || 'dev';
-const config = envName === 'prod' ? prodConfig : devConfig;
+let config: KiroBankingConfig = envName === 'prod' ? prodConfig : devConfig;
+
+// Optional overrides for experimentation (defaults come from config/environments.ts):
+//   -c region=<aws-region>       workload region for all stacks (e.g. us-east-1 to
+//                                create the Kiro endpoints in the Kiro profile region)
+//   -c egress=nat-dns-firewall   egress mode (none | nat-dns-firewall)
+//   -c createConfigRecorder=true | -c enableGuardDuty=false |
+//   -c enableSecurityHub=false   | -c enableAccessAnalyzer=false
+//                                account-level singletons (see KiroBankingConfig)
+const regionOverride = app.node.tryGetContext('region');
+if (regionOverride !== undefined) {
+  if (typeof regionOverride !== 'string' || !/^[a-z]{2}(-[a-z]+)+-\d+$/.test(regionOverride)) {
+    throw new Error(`Invalid -c region=${String(regionOverride)} (expected an AWS region such as ap-southeast-1)`);
+  }
+  config = { ...config, region: regionOverride };
+}
+
+const egressOverride = app.node.tryGetContext('egress');
+if (egressOverride !== undefined) {
+  if (!(EGRESS_MODES as readonly unknown[]).includes(egressOverride)) {
+    throw new Error(`Invalid -c egress=${String(egressOverride)} (expected one of: ${EGRESS_MODES.join(', ')})`);
+  }
+  config = { ...config, egress: { ...config.egress, mode: egressOverride as EgressMode } };
+}
+
+const BOOLEAN_OVERRIDES = ['createConfigRecorder', 'enableGuardDuty', 'enableSecurityHub', 'enableAccessAnalyzer'] as const;
+for (const key of BOOLEAN_OVERRIDES) {
+  const value: unknown = app.node.tryGetContext(key);
+  if (value === undefined) {
+    continue;
+  }
+  if (value !== true && value !== false && value !== 'true' && value !== 'false') {
+    throw new Error(`Invalid -c ${key}=${String(value)} (expected true or false)`);
+  }
+  config = { ...config, [key]: value === true || value === 'true' };
+}
 
 const env: cdk.Environment = {
   region: config.region,
@@ -29,11 +63,11 @@ const encryptionStack = new EncryptionStack(app, `KiroBanking-Encryption-${confi
   description: 'KMS customer-managed keys for Kiro banking environment (MAS TRM 10.2 Cryptographic Key Management)',
 });
 
-// --- Network Stack (VPC + PrivateLink) ---
+// --- Network Stack (VPC, VPC endpoints, optional filtered egress) ---
 const networkStack = new NetworkStack(app, `KiroBanking-Network-${config.environment}`, {
   env,
   config,
-  description: 'VPC with PrivateLink endpoints for Kiro (MAS TRM Section 11.2)',
+  description: 'VPC with VPC endpoints and optional filtered egress for Kiro (MAS TRM Section 11.2)',
 });
 
 // --- Monitoring Stack (CloudTrail + CloudWatch) ---

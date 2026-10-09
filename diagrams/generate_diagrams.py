@@ -1,16 +1,30 @@
 """
-Generate architecture diagrams for Kiro Banking Best Practices.
-Requires: pip install diagrams (and graphviz installed via brew/apt)
+Optional PNG export of the architecture diagrams for AWS Kiro in FSI Best Practices.
+
+The README embeds the same three diagrams as Mermaid blocks, which GitHub renders
+natively; those are the maintained versions. Use this script only when you need
+PNG files (slides, offline documents). Keep the labels in sync with the Mermaid
+blocks in README.md (Security Architecture section).
+
+How to run:
+    pip install diagrams                  # the Python "diagrams" package
+    brew install graphviz                 # or: apt-get install graphviz (provides `dot`)
+    cd diagrams && python3 generate_diagrams.py
+
+Output (current directory): architecture-option-a.png, architecture-option-b.png,
+security-layers.png. The README does not reference these files.
 """
 from diagrams import Diagram, Cluster, Edge
-from diagrams.aws.security import IAM, KMS
-from diagrams.aws.network import VPC, Privatelink, Endpoint
 from diagrams.aws.enduser import Workspaces
+from diagrams.aws.general import General, User
 from diagrams.aws.management import Cloudtrail, Cloudwatch, Config as AwsConfig
+from diagrams.aws.network import Endpoint, NATGateway, VPC
+from diagrams.aws.security import DirectoryService, Guardduty, KMS, SingleSignOn
 from diagrams.aws.storage import S3
-from diagrams.aws.general import User
-from diagrams.onprem.security import Vault
-from diagrams.onprem.client import Users
+from diagrams.onprem.client import Client, Users
+
+GRAPH_ATTR = {"fontsize": "14", "bgcolor": "white", "pad": "0.5"}
+PROFILE_REGION = "Kiro profile region\n(us-east-1 or eu-central-1)"
 
 # --- Option A: Via IAM Identity Center ---
 with Diagram(
@@ -18,102 +32,114 @@ with Diagram(
     filename="architecture-option-a",
     show=False,
     direction="TB",
-    graph_attr={"fontsize": "14", "bgcolor": "white", "pad": "0.5"},
+    graph_attr=GRAPH_ATTR,
 ):
-    idp = Users("Enterprise IdP\n(Entra ID / Okta)")
-    idc = IAM("AWS IAM\nIdentity Center")
+    idp = Users("Enterprise IdP\n(Entra ID or Okta, MFA)")
+    dev = User("Developer")
+    subscription = General("Kiro subscription\n(assigned in the Kiro console)")
 
-    with Cluster("Corporate VPC (Private Subnets Only)"):
-        workspaces = Workspaces("Amazon WorkSpaces\n(VDI + DLP + GPO)")
+    with Cluster("Identity region, e.g. ap-southeast-1"):
+        idc = SingleSignOn("IAM Identity Center")
 
-        with Cluster("VPC Endpoints (Privatelink)"):
-            kiro_ep = Endpoint("Kiro Endpoint")
-            bedrock_ep = Endpoint("Bedrock Endpoint")
-            logs_ep = Endpoint("CloudWatch Logs")
+    with Cluster("Workload account, ap-southeast-1"):
+        with Cluster("Private VPC: no public subnets, no inbound access"):
+            vdi = Workspaces("WorkSpaces VDI\n(DLP, GPO)")
+            kiro_client = Client("Kiro IDE / CLI")
+            policy = General("Admin policy\nmanaged-settings.json\n(on the VDI image)")
+            aws_endpoints = Endpoint("AWS service endpoints\n(logs, kms, sts, s3)")
+        egress = NATGateway("Allowlisted HTTPS egress\n(sign-in, downloads, Kiro APIs)")
+        with Cluster("Monitoring"):
+            trail = Cloudtrail("CloudTrail")
+            cw = Cloudwatch("CloudWatch")
+            gd = Guardduty("GuardDuty")
+            cfg = AwsConfig("AWS Config")
+            kms = KMS("Customer-managed\nKMS keys")
 
-    with Cluster("Monitoring & Compliance"):
-        trail = Cloudtrail("CloudTrail\nAudit Logs")
-        cw = Cloudwatch("CloudWatch\nAlarms")
-        cfg = AwsConfig("AWS Config\nCompliance Rules")
-        bucket = S3("Audit Log\nBucket (KMS)")
-
-    with Cluster("Encryption"):
-        kms = KMS("Customer-Managed\nKMS Keys")
+    with Cluster(PROFILE_REGION):
+        kiro = General("Kiro service\n(stores and processes\nprompts and code context)")
+        prompt_logs = S3("Prompt logs and\nuser activity reports")
 
     idp >> Edge(label="SAML 2.0 + SCIM") >> idc
-    idc >> Edge(label="Kiro subscription") >> kiro_ep
-    idc >> Edge(label="VDI access") >> workspaces
-    workspaces >> Edge(label="HTTPS/443") >> kiro_ep
-    workspaces >> Edge(label="HTTPS/443") >> bedrock_ep
-    trail >> bucket
-    kms >> bucket
-    trail >> logs_ep
+    idc >> Edge(label="users and groups") >> subscription >> kiro
+    dev >> vdi >> kiro_client
+    policy >> Edge(style="dashed", label="enforced by the Kiro client") >> kiro_client
+    vdi >> aws_endpoints >> trail
+    kiro_client >> egress >> Edge(label="HTTPS 443") >> kiro
+    kiro >> prompt_logs
 
 # --- Option B: Direct IdP Federation ---
 with Diagram(
-    "Option B: Direct IdP Federation (No IAM IDC)",
+    "Option B: Direct IdP Federation (No IAM Identity Center)",
     filename="architecture-option-b",
     show=False,
     direction="TB",
-    graph_attr={"fontsize": "14", "bgcolor": "white", "pad": "0.5"},
+    graph_attr=GRAPH_ATTR,
 ):
-    idp = Users("Enterprise IdP\n(Entra ID / Okta)")
+    idp = Users("Enterprise IdP\n(Okta or Entra ID, MFA)")
+    dev = User("Developer")
 
-    kiro_direct = Vault("Kiro IDE/CLI\n(OIDC + SCIM)")
+    with Cluster("Workload account, ap-southeast-1"):
+        directory = DirectoryService("AWS Directory Service\n(Managed AD, Simple AD\nor AD Connector)")
+        with Cluster("Private VPC: no public subnets, no inbound access"):
+            vdi = Workspaces("WorkSpaces VDI\n(DLP, GPO)")
+            kiro_client = Client("Kiro IDE / CLI")
+            policy = General("Admin policy\nmanaged-settings.json\n(Option B file)")
+            aws_endpoints = Endpoint("AWS service endpoints\n(logs, kms, sts, s3)")
+        egress = NATGateway("Allowlisted HTTPS egress\n(IdP sign-in, downloads, Kiro APIs)")
+        with Cluster("Monitoring"):
+            trail = Cloudtrail("CloudTrail")
+            cw = Cloudwatch("CloudWatch")
+            gd = Guardduty("GuardDuty")
+            cfg = AwsConfig("AWS Config")
+            kms = KMS("Customer-managed\nKMS keys")
 
-    with Cluster("Corporate VPC (Private Subnets Only)"):
-        workspaces = Workspaces("Amazon WorkSpaces\n(SAML 2.0 + VDI)")
+    with Cluster(PROFILE_REGION):
+        kiro = General("Kiro service\n(stores and processes\nprompts and code context)")
+        prompt_logs = S3("Prompt logs and\nuser activity reports")
 
-        with Cluster("VPC Endpoints (Privatelink)"):
-            kiro_ep = Endpoint("Kiro Endpoint")
-            bedrock_ep = Endpoint("Bedrock Endpoint")
-            logs_ep = Endpoint("CloudWatch Logs")
+    idp >> Edge(label="OIDC + SCIM") >> kiro
+    idp >> Edge(label="SAML 2.0") >> vdi
+    directory >> Edge(label="WorkSpaces directory") >> vdi
+    dev >> vdi >> kiro_client
+    policy >> Edge(style="dashed", label="enforced by the Kiro client") >> kiro_client
+    vdi >> aws_endpoints >> trail
+    kiro_client >> egress >> Edge(label="HTTPS 443") >> kiro
+    kiro >> prompt_logs
 
-    with Cluster("Monitoring & Compliance"):
-        trail = Cloudtrail("CloudTrail\nAudit Logs")
-        cw = Cloudwatch("CloudWatch\nAlarms")
-        cfg = AwsConfig("AWS Config\nCompliance Rules")
-        bucket = S3("Audit Log\nBucket (KMS)")
-
-    with Cluster("Encryption"):
-        kms = KMS("Customer-Managed\nKMS Keys")
-
-    idp >> Edge(label="OIDC + SCIM") >> kiro_direct
-    idp >> Edge(label="SAML 2.0") >> workspaces
-    workspaces >> Edge(label="HTTPS/443") >> kiro_ep
-    workspaces >> Edge(label="HTTPS/443") >> bedrock_ep
-    trail >> bucket
-    kms >> bucket
-    trail >> logs_ep
-
-# --- Security Layers ---
+# --- Security Layers (this guide's 5-layer model, not a model defined by MAS) ---
 with Diagram(
-    "MAS TRM Security Layers",
+    "This Guide's 5-Layer Security Model",
     filename="security-layers",
     show=False,
     direction="TB",
-    graph_attr={"fontsize": "14", "bgcolor": "white", "pad": "0.5"},
+    graph_attr=GRAPH_ATTR,
 ):
-    user = User("Banking Developer")
+    dev = User("Banking developer")
 
-    with Cluster("Layer 1: Identity (MAS TRM 9)"):
-        idp = Users("Enterprise IdP\n+ MFA")
+    with Cluster("Layer 1: Identity - TRM 9.1, 9.2"):
+        identity = Users("Enterprise IdP, MFA, SCIM\n(IAM Identity Center or\ndirect federation)")
 
-    with Cluster("Layer 2: Network (MAS TRM 11.2)"):
-        vpc = VPC("Private VPC")
-        pl = Privatelink("Privatelink\nEndpoints")
+    with Cluster("Layer 2: Network - TRM 11.2"):
+        vpc = VPC("Private VPC,\nSGs and NACLs")
+        aws_endpoints = Endpoint("AWS service\nendpoints")
+        egress = NATGateway("Allowlisted\nHTTPS egress")
 
-    with Cluster("Layer 3: Endpoint (MAS TRM 8.5)"):
-        ws = Workspaces("WorkSpaces VDI\n+ DLP + GPO")
+    with Cluster("Layer 3: Endpoint and VDI - TRM 9.3, 11.3, 11.4"):
+        vdi = Workspaces("WorkSpaces VDI, DLP, GPO\n(no local admin rights)")
 
-    with Cluster("Layer 4: Application"):
-        kiro = Vault("Kiro IDE\n+ MCP Governance")
+    with Cluster("Layer 4: Application and agent runtime - TRM 3.4, 6.1, 6.3"):
+        runtime = Client("Kiro IDE / CLI\nadmin policy, permissions,\nhooks, MCP registry")
 
-    with Cluster("Layer 5: Audit (MAS TRM 15)"):
+    with Cluster("Layer 5: Audit and monitoring - TRM 12.2, evidence for 15.1 IT audit"):
+        prompt_logs = S3("Prompt logs and\nuser activity reports")
         trail = Cloudtrail("CloudTrail")
         cw = Cloudwatch("CloudWatch")
-        kms = KMS("KMS Encryption")
+        gd = Guardduty("GuardDuty")
+        hook_log = General("Hook audit log\n(shipped to the SIEM)")
 
-    user >> idp >> ws >> vpc >> pl >> kiro
-    kiro >> trail
-    trail >> kms
+    kiro = General("Kiro service\n(profile region)")
+
+    dev >> identity >> vpc >> vdi >> runtime >> egress >> kiro
+    vpc >> aws_endpoints
+    runtime >> Edge(style="dashed", label="hook audit log") >> hook_log
+    kiro >> Edge(style="dashed", label="prompt logs") >> prompt_logs

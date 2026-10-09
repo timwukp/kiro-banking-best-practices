@@ -1,0 +1,41 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "PII and secret guard",
+      "description": "Block tool input containing secrets or Singapore personal data (PDPA; MAS TRM 11.1)",
+      "trigger": "PreToolUse",
+      "matcher": "*",
+      "action": { "type": "command", "command": "/opt/kiro/hooks/pii-guard.sh" },
+      "timeout": 5,
+      "enabled": true
+    },
+    {
+      "name": "Git history guard",
+      "description": "Block force-push, pushes to main/master and history rewrites (MAS TRM 6.3, 7.5)",
+      "trigger": "PreToolUse",
+      "matcher": "shell",
+      "action": { "type": "command", "command": "/opt/kiro/hooks/git-guard.sh" },
+      "timeout": 5,
+      "enabled": true
+    },
+    {
+      "name": "Destructive filesystem guard",
+      "description": "Block recursive deletion of protected paths, .git removal and raw device writes (MAS TRM 11.3)",
+      "trigger": "PreToolUse",
+      "matcher": "shell",
+      "action": { "type": "command", "command": "/opt/kiro/hooks/destructive-fs-guard.sh" },
+      "timeout": 5,
+      "enabled": true
+    },
+    {
+      "name": "Audit logger",
+      "description": "Append a hash-chained JSONL record per tool call (MAS TRM 12.2; supplementary to Kiro prompt logging)",
+      "trigger": "PostToolUse",
+      "matcher": "*",
+      "action": { "type": "command", "command": "/opt/kiro/hooks/audit-logger.sh" },
+      "timeout": 5,
+      "enabled": true
+    }
+  ]
+}

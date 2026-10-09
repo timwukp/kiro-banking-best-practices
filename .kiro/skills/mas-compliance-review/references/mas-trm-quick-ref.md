@@ -53,9 +53,11 @@ Source: [MAS Technology Risk Management Guidelines](https://www.mas.gov.sg/regul
 - **Lockout:** 3 failed attempts (example institutional policy, not prescribed by MAS TRM)
 - **Biometrics:** FAR/FRR calibrated to risk
 
-## Data Residency (Singapore)
+## Data Location and Cross-Border Processing
 
-- Primary region: `ap-southeast-1`
-- Cross-region inference: Disabled for regulated workloads
-- Data storage: Singapore only
-- Backup: Within Singapore or approved jurisdictions
+- **MAS position:** MAS TRM does not impose a data-localisation mandate. Where data is hosted is an institutional choice. Offshore processing is assessed as a third-party and outsourcing risk (TRM 3.4 and the MAS outsourcing requirements) and, for personal data, under the PDPA Transfer Limitation Obligation (s26; see `pdpa-checklist.md`).
+- **Workload region:** `ap-southeast-1` (Singapore) for the institution's own infrastructure and application data (VPC, WorkSpaces, CloudTrail, AWS Config, AWS Backup), where institutional policy requires it.
+- **Kiro profile region:** `us-east-1` or `eu-central-1` (AWS GovCloud (US) for US public-sector profiles). Kiro has no Singapore profile region. Prompts, code context and responses are stored and processed there, and the prompt-log bucket, user activity report bucket and Kiro customer-managed KMS key must be in that region. IAM Identity Center can stay in `ap-southeast-1`.
+- **Cross-region inference:** inference scope is set per model ([Kiro models page](https://kiro.dev/docs/models/)). Geography-scope models, which include all Claude models, may be processed in another region of the same geography (US: `us-east-1`, `us-east-2`, `us-west-2`; Europe: `eu-central-1`, `eu-west-1`, `eu-west-3`, `eu-north-1`, `eu-south-1`, `eu-south-2`). Global-scope models (currently GPT-5.6 Sol, Terra and Luna) may be processed in supported commercial AWS Regions worldwide and use the US endpoint even for `eu-central-1` profiles. Lifecycle status (experimental or preview) does not determine routing, and cross-region inference does not change where Kiro stores data. Kiro has no setting to disable cross-region inference; if processing must stay within one geography, use the model allow list (model governance) to exclude Global-scope models.
+- **What to check:** Kiro is treated as a cross-border transfer and assessed under TRM 3.4 and outsourcing; customer information and personal data are kept out of prompts and code context (banks: FSM-N05 para 9, banking secrecy); Global-scope models are excluded through the model allow list (and preview terms such as Claude Fable 5.1's 30-day retention are reviewed); workload backups stay in the workload region or another jurisdiction approved by institutional policy.
+- Source: [Kiro supported regions](https://kiro.dev/docs/enterprise/supported-regions/) and [Kiro data protection](https://kiro.dev/docs/privacy-and-security/data-protection/) (verified 2026-10-08).
