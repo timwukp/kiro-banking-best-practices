@@ -78,12 +78,40 @@
 amount = request.json['amount']
 transfer(from_account, to_account, amount)
 
-# PASS: Server-side validation
+# FAIL: validated, but the balance is read without a lock (same race as the next pattern)
 amount = Decimal(request.json['amount'])
 if amount <= 0 or amount > account.balance:
     raise ValidationError("Invalid amount")
 transfer(from_account, to_account, amount)
+
+# PASS: server-side validation, then one atomic conditional UPDATE inside a transaction
+from decimal import Decimal, InvalidOperation
+
+MAX_TRANSFER = Decimal("200000.00")  # per institutional limits
+
+def parse_amount(raw) -> Decimal:
+    try:
+        amount = Decimal(str(raw))
+    except (InvalidOperation, ValueError):
+        raise ValidationError("Invalid amount")
+    if (not amount.is_finite() or amount <= 0 or amount > MAX_TRANSFER
+            or amount != amount.quantize(Decimal("0.01"))):
+        raise ValidationError("Invalid amount")
+    return amount
+
+amount = parse_amount(request.json.get('amount'))
+with db.transaction():
+    debited = db.execute(
+        "UPDATE accounts SET balance = balance - %s "
+        "WHERE id = %s AND owner_id = %s AND balance >= %s",
+        (amount, from_account_id, current_user.id, amount),
+    ).rowcount
+    if debited != 1:  # not the caller's account, or insufficient funds
+        raise ValidationError("Transfer rejected")
+    credit(to_account_id, amount)  # same transaction: both legs commit or neither does
 ```
+
+The balance check and the debit happen in a single statement, so two concurrent requests cannot both pass the check. `SELECT ... FOR UPDATE` (next pattern) is the alternative when the logic needs the row in application code.
 
 ### Pattern: Race Condition in Balance Check
 ```python
@@ -91,11 +119,11 @@ transfer(from_account, to_account, amount)
 if account.balance >= amount:
     account.balance -= amount  # Race condition!
 
-# PASS: Atomic operation with database lock
+# PASS: Atomic operation with database lock (SELECT ... FOR UPDATE; Peewee shown)
 with db.atomic():
     account = Account.select().where(
         Account.id == account_id
-    ).for_update().get()
+    ).for_update().get()   # row stays locked until the transaction commits
     if account.balance >= amount:
         account.balance -= amount
         account.save()
@@ -107,20 +135,30 @@ with db.atomic():
 def transfer(from_acc, to_acc, amount):
     execute_transfer(from_acc, to_acc, amount)
 
-# PASS: Complete audit trail
-def transfer(from_acc, to_acc, amount):
-    logger.info(json.dumps({
-        "event": "transfer_initiated",
-        "from": from_acc, "to": to_acc,
+# FAIL: audit trail that logs full account numbers (PII in logs)
+logger.info(json.dumps({"event": "transfer_initiated", "from": from_acc, "to": to_acc}))
+
+# PASS: complete audit trail with internal account IDs, not account numbers
+import json
+from datetime import datetime, timezone
+
+def mask_account(number: str) -> str:
+    """1234567890 -> ******7890 (use only where a person must recognise the account)."""
+    return "*" * (len(number) - 4) + number[-4:]
+
+def transfer(from_account_id, to_account_id, amount):
+    base = {
+        "user": get_current_user_id(),
+        "trace_id": get_trace_id(),
+        "from_account_id": from_account_id,  # internal surrogate key, not the account number
+        "to_account_id": to_account_id,
         "amount": str(amount),
-        "user": get_current_user(),
-        "timestamp": datetime.utcnow().isoformat(),
-        "trace_id": get_trace_id()
-    }))
-    result = execute_transfer(from_acc, to_acc, amount)
-    logger.info(json.dumps({
-        "event": "transfer_completed",
-        "status": result.status,
-        "reference": result.ref_id
-    }))
+    }
+    audit_log.info(json.dumps({**base, "event": "transfer_initiated",
+                               "timestamp": datetime.now(timezone.utc).isoformat()}))
+    result = execute_transfer(from_account_id, to_account_id, amount)
+    audit_log.info(json.dumps({**base, "event": "transfer_completed",
+                               "outcome": result.status,
+                               "reference": result.ref_id,
+                               "timestamp": datetime.now(timezone.utc).isoformat()}))
 ```

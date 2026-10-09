@@ -1,0 +1,136 @@
+# expect<TAB>pattern_id<TAB>input   (expect = match | nomatch; one case per line; lines starting with # are comments)
+# Synthetic values only. NRIC/FIN: sequential digits with a valid check letter. Cards: public test numbers.
+# AWS: the AWS documentation example key. Token- and key-shaped values are written as placeholders and
+# expanded by patterns.test.sh at runtime, so none is committed:
+#   {{PEM}} = five dashes + BEGIN    {{GHP}} {{GHO}} {{GHPAT}} = GitHub token prefixes
+#   {{TOK36}} {{TOK82}} = filler of that length    {{ASIA}} = temporary-key form of the AWS example key
+match	nric	S1234567D
+match	nric	nric = "T1234567J"
+match	nric	FIN: G1234567X,
+match	nric	worker M1234567K
+match	nric	(F1234567N)
+nomatch	nric	XS1234567D
+nomatch	nric	S12345678D
+nomatch	nric	S1234567
+nomatch	nric	A1234567B
+nomatch	nric	S1234567D9
+match	fin	F1234567N
+match	fin	G1234567X
+match	fin	pass holder M1234567K
+nomatch	fin	S1234567D
+nomatch	fin	T1234567J
+match	phone_sg	91234567
+match	phone_sg	call 9123 4567 now
+match	phone_sg	+6591234567
+match	phone_sg	+65 9123 4567
+match	phone_sg	+65-9123-4567
+match	phone_sg	office 61234567
+match	phone_sg	voip 31234567
+match	phone_sg	mobile: 81234567.
+nomatch	phone_sg	12345678
+nomatch	phone_sg	912345678
+nomatch	phone_sg	9123456
+nomatch	phone_sg	+65 1234 5678
+nomatch	phone_sg	ref 591234567
+nomatch	phone_sg	20231015
+match	postal_sg	Singapore 238801
+match	postal_sg	1 Raffles Place, Singapore 048616
+match	postal_sg	S(238801)
+match	postal_sg	Postal code: 238801
+match	postal_sg	postcode=018956
+nomatch	postal_sg	238801
+nomatch	postal_sg	order 123456
+nomatch	postal_sg	Singapore 2388011
+nomatch	postal_sg	items(123456)
+nomatch	postal_sg	Singapore 61234567
+match	bank_account	account: 1234567890
+match	bank_account	Acct No. 123-456789-0
+match	bank_account	A/C 0123456789
+match	bank_account	accountNumber = '123456789012'
+match	bank_account	accounts 1234 5678 90
+nomatch	bank_account	1234567890
+nomatch	bank_account	created_at = 1696800000
+nomatch	bank_account	account 1234567890123
+nomatch	bank_account	account id 123456789
+nomatch	bank_account	subaccount 1234567890
+match	card_visa	4111111111111111
+match	card_visa	4111 1111 1111 1111
+match	card_visa	4111-1111-1111-1111
+match	card_visa	card=4222222222222
+match	card_visa	4111111111111111110
+nomatch	card_visa	41111111111111
+nomatch	card_visa	41111111111111111
+nomatch	card_visa	411111111111111111111
+nomatch	card_visa	4111 1111 1111
+nomatch	card_visa	5555555555554444
+match	card_mastercard	5555555555554444
+match	card_mastercard	5105 1051 0510 5100
+match	card_mastercard	2223003122003222
+match	card_mastercard	2221000000000009
+match	card_mastercard	2720-9999-9999-9996
+nomatch	card_mastercard	2220123412341234
+nomatch	card_mastercard	2721123412341234
+nomatch	card_mastercard	5655555555554444
+nomatch	card_mastercard	5055555555554444
+nomatch	card_mastercard	555555555555444
+match	card_amex	378282246310005
+match	card_amex	3782 822463 10005
+match	card_amex	3714-496353-98431
+nomatch	card_amex	358282246310005
+nomatch	card_amex	37828224631000
+nomatch	card_amex	3782822463100051
+match	swift_bic	SWIFT: DBSSSGSG
+match	swift_bic	swift code OCBCSGSGXXX
+match	swift_bic	BIC=UOVBSGSG
+match	swift_bic	SWIFT/BIC: DBSSSGSG
+nomatch	swift_bic	DBSSSGSG
+nomatch	swift_bic	PASSWORD
+nomatch	swift_bic	swift: dbsssgsg
+nomatch	swift_bic	BIC: DBSSSGSG12
+nomatch	swift_bic	Swift language: SwiftUI
+match	email	contact john.tan@example.com today
+match	email	a.b+tag@bank.com.sg
+nomatch	email	user@localhost
+nomatch	email	@decorator
+nomatch	email	name at example dot com
+match	aws_access_key_id	AKIAIOSFODNN7EXAMPLE
+match	aws_access_key_id	aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+match	aws_access_key_id	"AccessKeyId": "{{ASIA}}"
+nomatch	aws_access_key_id	AKIAIOSFODNN7EXAMPL
+nomatch	aws_access_key_id	AKIAIOSFODNN7EXAMPLE1
+nomatch	aws_access_key_id	XAKIAIOSFODNN7EXAMPLE
+nomatch	aws_access_key_id	akiaiosfodnn7example
+match	aws_secret_access_key	AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+match	aws_secret_access_key	aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+match	aws_secret_access_key	"SecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+match	aws_secret_access_key	secret_access_key: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
+nomatch	aws_secret_access_key	aws_secret_access_key = ${AWS_SECRET}
+nomatch	aws_secret_access_key	secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+nomatch	aws_secret_access_key	aws_secret_access_key=tooshort
+match	github_token	token = "{{GHP}}{{TOK36}}"
+match	github_token	GITHUB_TOKEN={{GHO}}{{TOK36}}
+match	github_token	{{GHPAT}}{{TOK82}}
+nomatch	github_token	{{GHP}}short
+nomatch	github_token	{{GHPAT}}short
+nomatch	github_token	ghx_{{TOK36}}
+match	private_key	{{PEM}} RSA PRIVATE KEY-----
+match	private_key	{{PEM}} EC PRIVATE KEY-----
+match	private_key	{{PEM}} DSA PRIVATE KEY-----
+match	private_key	{{PEM}} OPENSSH PRIVATE KEY-----
+match	private_key	{{PEM}} ENCRYPTED PRIVATE KEY-----
+match	private_key	{{PEM}} PRIVATE KEY-----
+match	private_key	{{PEM}} PGP PRIVATE KEY BLOCK-----
+nomatch	private_key	{{PEM}} PUBLIC KEY-----
+nomatch	private_key	{{PEM}} RSA PUBLIC KEY-----
+nomatch	private_key	{{PEM}} CERTIFICATE-----
+match	password_assignment	password = "hunter2"
+match	password_assignment	PASSWORD: 'Sup3rS3cret'
+match	password_assignment	{"db_password": "plaintext123"}
+match	password_assignment	DB_PASSWD="x1y2z3"
+match	password_assignment	client_secret = 'abc123'
+match	password_assignment	pwd='letmein'
+nomatch	password_assignment	password = os.environ["DB_PASSWORD"]
+nomatch	password_assignment	password = getpass()
+nomatch	password_assignment	password = ""
+nomatch	password_assignment	"password": null
+nomatch	password_assignment	password_hint = None
