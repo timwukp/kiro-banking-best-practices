@@ -1,4 +1,4 @@
-# AWS Kiro Banking Best Practices
+# AWS Kiro in FSI Best Practices
 ## MAS-Aligned Implementation Guide for Singapore Financial Institutions
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
