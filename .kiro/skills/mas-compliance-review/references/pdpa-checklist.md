@@ -22,13 +22,14 @@
 ### Data Storage
 - [ ] Encrypted at rest (AES-256 / KMS)
 - [ ] Encrypted in transit (TLS 1.2+)
-- [ ] Data residency in Singapore (ap-southeast-1)
+- [ ] Storage location recorded for each system: application data in the workload region (for example `ap-southeast-1`) where institutional policy requires it; Kiro stores and processes prompts and code context in its profile region (`us-east-1` or `eu-central-1`), so treat any personal data reaching Kiro as a cross-border transfer (see Transfer Limitation below)
 - [ ] Retention period defined and enforced
 - [ ] Secure deletion when retention expires
 
 ### Transfer Limitation (PDPA s26)
 - [ ] Personal data transferred outside Singapore receives a standard of protection comparable to the PDPA: legally enforceable obligations (for example, a contract specifying the recipient countries, or binding corporate rules), specified certifications (APEC CBPR / Global CBPR; PRP for data intermediaries), or another deemed-compliance case
 - [ ] Transfers made by data intermediaries and cloud providers are covered (for example, an AI coding service that processes prompts or code in another region); the organisation remains responsible
+- [ ] Personal data kept out of Kiro prompts and code context (use masked or synthetic test data); Kiro has no Singapore profile region and may process content in other regions of the same geography, and Global-scope models (currently GPT-5.6 Sol, Terra and Luna) may be processed in AWS Regions worldwide, so exclude them with the model allow list if processing must stay within one geography
 
 ### Data Protection
 - [ ] No PII in logs, error messages, or debug output

@@ -22,7 +22,8 @@
 
 - All personal data must comply with Singapore PDPA
 - NRIC, FIN, credit card numbers must be masked in any output
-- Data residency: ap-southeast-1 (Singapore) only
+- Application data and infrastructure: deploy in the workload region `ap-southeast-1` (institutional policy; MAS TRM does not mandate data localisation)
+- Never put customer data, NRIC/FIN or production data in Kiro prompts or code context: Kiro stores and processes content in its profile region (`us-east-1` or `eu-central-1`), not in Singapore (PDPA s26 Transfer Limitation; banking secrecy)
 - Minimum 90-day retention for audit logs, 7-year archive for financial records
 
 ## Code Review

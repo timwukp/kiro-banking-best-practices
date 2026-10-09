@@ -39,7 +39,7 @@ Financial institutions face unique challenges when adopting AI development tools
 - **Data Protection** - Sensitive code and data must remain within controlled environments
 - **Access Control** - Enterprise identity management and MFA requirements
 - **Audit Requirements** - Complete audit trails for all AI-assisted development activities
-- **Network Security** - Private connectivity without internet exposure
+- **Network Security** - No inbound internet exposure and tightly controlled, allowlisted outbound connectivity
 
 This guide addresses these challenges with practical reference implementations (validated by unit tests, cdk-nag and synth; not a substitute for your own testing).
 
@@ -76,10 +76,10 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 - Session management and timeout policies
 
 ### 🌐 Network Isolation
-- End-to-end VPC architecture with no internet-facing endpoints
-- AWS PrivateLink for private connectivity to Kiro services
+- Private VPC for the WorkSpaces VDI in the workload region (`ap-southeast-1`): no public subnets and no inbound internet-facing endpoints
+- Kiro is reached over HTTPS: AWS PrivateLink to Kiro is available only in the Kiro profile region (`us-east-1` or `eu-central-1`), and sign-in and downloads always use public HTTPS endpoints, which must be allowlisted. See [Part 1, Section 3](Kiro-Agentic-SDLC-Banking-Best-Practices.md#3-network-security-architecture) for the connectivity options
 - Security groups and Network ACLs for defense-in-depth
-- DNS resolution within private network
+- Outbound traffic restricted to an allowlist of Kiro, IAM Identity Center and IdP hostnames (central egress proxy or firewall)
 
 ### 🖥️ Secure Development Environment
 - Amazon WorkSpaces VDI with encryption at rest and in transit
@@ -222,7 +222,7 @@ Before implementing Kiro in your banking environment, ensure you have:
 
 - ✅ AWS Organization with IAM Identity Center enabled
 - ✅ Enterprise IdP (Azure AD, Okta, Ping Identity) with SAML 2.0 support
-- ✅ Corporate VPC with private subnets configured
+- ✅ Corporate VPC with private subnets configured, plus an allowlisted HTTPS egress path for Kiro (see Part 1, Section 3)
 - ✅ Amazon WorkSpaces directory set up
 - ✅ DLP solution deployed (Symantec, McAfee, Microsoft Purview, or Forcepoint)
 - ✅ CloudTrail enabled for audit logging
@@ -240,7 +240,7 @@ region/account; your change-management cadence.
 | Workstream | Prerequisite | Technical effort* | Exit criterion (objective evidence) |
 |------------|--------------|-------------------|-------------------------------------|
 | Identity & access (IdP + SCIM + MFA) | IdP admin, IAM Identity Center | ~0.5–1 d | Test user auto-provisioned via SCIM; MFA enforced; social / Builder ID blocked |
-| Network isolation (VPC endpoints, SG/NACL, private DNS) | VPC + subnets | ~0.5–1 d | `cdk synth` clean; VDI connectivity test passes; no public endpoint |
+| Network isolation (VPC endpoints, SG/NACL, egress allowlist) | VPC + subnets; egress path | ~0.5–1 d | `cdk synth` clean; VDI reaches Kiro only through the allowlisted egress path; no inbound public endpoint |
 | Secure VDI (WorkSpaces + GPO/DLP) | Directory service | ~1–2 d | Encrypted WorkSpace launches; protected paths / trusted commands enforced |
 | MCP governance | approved-server list | ~0.5 d | Registry allow-list active; `mcp.json` read-only to developer (permission check) |
 | Agent runtime + endpoint enforcement | golden image | ~0.5–1 d | `agent-hooks/tests/run-tests.sh` + `mdm/tests/test-lockdown.sh` green; chaos harness = 0 unexpected bypass |
@@ -316,7 +316,7 @@ Both architectures share the same 5-layer security model:
 ![MAS TRM Security Layers](diagrams/security-layers.png)
 
 1. **Identity Layer** - Enterprise IdP + MFA (via IAM Identity Center or direct federation)
-2. **Network Layer** - VPC + PrivateLink + Security Groups
+2. **Network Layer** - VPC + Security Groups + allowlisted egress (PrivateLink to Kiro only in the profile region)
 3. **Endpoint Layer** - WorkSpaces VDI + DLP + GPO
 4. **Application Layer** - MCP Governance + Centralized Configuration + [Agent Runtime Governance](kiro-docs/agent-runtime-governance.md)
 5. **Audit Layer** - CloudTrail + CloudWatch + Compliance Validation (incl. agent tool-use audit log via `postToolUse` hook)
@@ -373,10 +373,10 @@ The MAS TRM Guidelines apply to all MAS-regulated financial institutions, includ
 | **6.1, 6.3** | Secure Coding and Source Code Review; DevSecOps | Human review and testing of AI-generated and third-party code before integration (6.1.3), SAST/DAST (Annex A), segregation of duties and human approval before merge | Section 6 |
 | **9.1** | User Access Management | IAM IDC + Enterprise IdP; MFA + Session Management | Section 2, Section 2.1.3 |
 | **9.2** | Privileged Access Management | MFA for administrative access (banks: Notice FSM-N06 paras 4.1, 4.6) | Section 2.1.3 |
-| **9.3** | Remote Access Management | WorkSpaces VDI over VPC + PrivateLink | Section 3, Section 4 |
+| **9.3** | Remote Access Management | WorkSpaces VDI in a private VPC with allowlisted egress | Section 3, Section 4 |
 | **10.1, 10.2** | Cryptographic Algorithm and Protocol; Key Management | TLS 1.2+; KMS customer-managed keys with rotation | Section 7 |
 | **11.1** | Data Security | DLP + Encryption + PDPA | Section 4.1.3, Section 11 |
-| **11.2** | Network Security | VPC Endpoints + Security Groups | Section 3.2 |
+| **11.2** | Network Security | VPC Endpoints + Security Groups + egress allowlist | Section 3.2 |
 | **11.3, 11.4** | System Security; Virtualisation Security | Hardened WorkSpaces images + GPO | Section 4 |
 | **12.2** | Cyber Event Monitoring and Detection | CloudTrail + CloudWatch monitoring | Section 8 |
 | **12.3** | Cyber Incident Response and Management | Escalation matrix + MAS notification (banks: Notice FSM-N05 paras 7–8) | Section 10 |
@@ -385,12 +385,12 @@ The MAS TRM Guidelines apply to all MAS-regulated financial institutions, includ
 
 ### Key Compliance Controls
 
-- ✅ **Zero Trust Architecture** - No internet-facing endpoints, all traffic through VPC PrivateLink
+- ✅ **Zero Trust Architecture** - No inbound internet-facing endpoints; Kiro traffic leaves only through an allowlisted HTTPS egress path. PrivateLink to Kiro exists only in the Kiro profile region, and sign-in and downloads use public HTTPS (see [Part 1, Section 3](Kiro-Agentic-SDLC-Banking-Best-Practices.md#3-network-security-architecture))
 - ✅ **MFA Enforcement** - Required for all user access via Enterprise IdP (TRM 9.1–9.2; banks: Notice FSM-N06 para 4.6)
 - ✅ **Least Privilege** - IAM policies grant minimum required permissions
 - ✅ **Encryption** - Data encrypted at rest (KMS) and in transit (TLS 1.2+)
 - ✅ **Audit Trails** - CloudTrail logging (TRM 12.2); 90-day minimum retention is an example institutional policy (not prescribed by MAS TRM)
-- ✅ **Data Location Governance** - Kiro operates from supported profile regions (us-east-1, eu-central-1); prompt logs and user activity reports are stored in the profile region per AWS requirements. MAS TRM does not mandate data localisation — residency preferences are customer-driven. For organizations requiring regional log copies, S3 Cross-Region Replication (CRR) to ap-southeast-1 is available as a complementary control
+- ✅ **Data Location Governance** - Identity can stay in Singapore (IAM Identity Center in ap-southeast-1), but Kiro stores and processes prompts, code context and responses in its profile region (us-east-1 or eu-central-1; there is no Singapore option) and may process them in other regions of the same geography; Global-scope models (currently GPT-5.6 Sol, Terra and Luna) may be processed in AWS Regions worldwide, while Geography-scope models, including all Claude models, stay within the geography. Prompt logs and user activity reports are stored in the profile region per AWS requirements. MAS TRM does not mandate data localisation — residency preferences are customer-driven. Treat Kiro use as a cross-border transfer (PDPA Transfer Limitation Obligation, s26; Part 2, Section 11), keep customer data out of prompts, and exclude Global-scope models with the model allow list. For organizations requiring regional log copies, S3 Cross-Region Replication (CRR) to ap-southeast-1 is available as a complementary control (Part 2, Section 7.2)
 - ✅ **DLP Controls** - Prevent code exfiltration and credential exposure
 - ✅ **MCP Governance** - Centrally managed whitelist, no developer modifications
 - ✅ **PDPA Alignment** - Data classification, DLP rules for personal data, breach notification
