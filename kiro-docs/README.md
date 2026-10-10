@@ -19,8 +19,9 @@ These files are local copies of Kiro platform documentation, included for offlin
 | [security-governance-features.md](security-governance-features.md) † | https://kiro.dev/changelog/ + https://kiro.dev/changelog/cli/ | 2026-06-04 |
 | [agent-runtime-governance.md](agent-runtime-governance.md) ‡ | Original authored guidance (this repo) | 2026-10-08 |
 | [mdm-endpoint-enforcement.md](mdm-endpoint-enforcement.md) ‡ | Original authored guidance (this repo) | 2026-10-08 |
-| [mdm-test-evidence.md](mdm-test-evidence.md) ‡ | Original authored guidance (this repo) | 2026-06-04 (historical; note added 2026-10-08) |
-| [chaos-pentest-evidence.md](chaos-pentest-evidence.md) ‡ | Original authored guidance (this repo) | 2026-06-05 (historical; note added 2026-10-08) |
+| [aws-integration-test-evidence.md](aws-integration-test-evidence.md) ‡ | Original authored guidance (this repo): sanitized results of `security-tests/aws-integration/` | 2026-10-10 |
+| [mdm-test-evidence.md](mdm-test-evidence.md) ‡ | Original authored guidance (this repo) | 2026-06-04 (historical; notes added 2026-10-08 and 2026-10-10) |
+| [chaos-pentest-evidence.md](chaos-pentest-evidence.md) ‡ | Original authored guidance (this repo) | 2026-06-05 (historical; notes added 2026-10-08 and 2026-10-10) |
 
 † Compiled, banking-focused reference synthesized from several official pages or the changelogs — not a verbatim snapshot of a single page.
 ‡ Original guidance authored for this repo (Layer 4 agent runtime governance) — not a snapshot of an external page.
@@ -34,6 +35,7 @@ The reference snapshots above describe Kiro behaviour. The deployable files that
 | [`../managed-settings/`](../managed-settings/) | Admin policy `managed-settings.json` (Option A: IAM Identity Center; Option B: external IdP), user `permissions.yaml` template, MCP registry example, deployment paths and validation commands |
 | [`../agent-hooks/`](../agent-hooks/) | Hook scripts and the `banking-secure` custom agent |
 | [`../mdm/`](../mdm/) | MDM / endpoint scripts that deploy the policy to the official OS paths |
+| [`../security-tests/`](../security-tests/) | Chaos harness (`chaos/`) and the sandbox-account integration test (`aws-integration/`) |
 
 ## Maintenance
 

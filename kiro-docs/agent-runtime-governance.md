@@ -147,12 +147,12 @@ These protect against a prompt-injected agent, not against the developer, who ca
 
 ## Testing
 
-- Hooks: `bash agent-hooks/tests/run-tests.sh`, including regression tests for the PR3 review findings. Run locally; a CI job is added separately.
-- MDM scripts: `bash mdm/tests/test-lockdown.sh` and `bash mdm/tests/test-lockdown-macos.sh` run non-root dry-run tests by default (policy validation, `SHA256SUMS` verification, planned actions, no system changes). Root and administrator tests are opt-in and only for disposable hosts. Run locally; a CI job is added separately.
+- Hooks: `bash agent-hooks/tests/run-tests.sh`, including regression tests for the PR3 review findings. CI (`validate-governance`) runs them.
+- MDM scripts: `bash mdm/tests/test-lockdown.sh` and `bash mdm/tests/test-lockdown-macos.sh` run non-root dry-run tests by default (policy validation, `SHA256SUMS` verification, planned actions, no system changes). Root and administrator tests are opt-in and only for disposable hosts. CI runs the Linux dry run.
 - Adversarial: `bash security-tests/chaos/run-chaos.sh --hooks-only` and `run-chaos-hardened.sh --hooks-only` feed crafted events to the shipped hooks without root or system changes. The full runs need a throwaway Linux VM and `CHAOS_ALLOW_SYSTEM_CHANGES=1`. They exercise hook-level and OS-level controls only and do not drive a Kiro client.
 - Pilot: restart Kiro, ask the agent to run a denied command (for example `git push --force`) and confirm that the denial names "administration"; sign out and confirm that only the permitted sign-in method is offered.
 
-Historical results ([`chaos-pentest-evidence.md`](chaos-pentest-evidence.md), [`mdm-test-evidence.md`](mdm-test-evidence.md)) predate this model; read their dated notes.
+Results for the current hooks, MDM scripts and chaos harness (disposable EC2 instances, 2026-10-10) are in [`aws-integration-test-evidence.md`](aws-integration-test-evidence.md). They do not include a live Kiro session, because the end-to-end prompts were skipped without an API key. Historical results ([`chaos-pentest-evidence.md`](chaos-pentest-evidence.md), [`mdm-test-evidence.md`](mdm-test-evidence.md)) predate this model; read their dated notes.
 
 ## References
 

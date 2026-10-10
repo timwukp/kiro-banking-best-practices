@@ -21,10 +21,17 @@ Integration test in a sandbox AWS account and the fixes it found. Sanitized resu
 - **CDK deprecations:** `addStackDependency` / `addResourceDependency`. The cross-stack reference strength is pinned to `strong` in `cdk.json`, so the existing CloudFormation exports are unchanged.
 - **AWS Config:** the PDPA RDS rules are explicitly scoped to `AWS::RDS::DBInstance`.
 - **Chaos harness:** evidence records for steps run through `$(dev …)` showed the previous step's command, because `dev()` ran in a subshell. The new `devo()` helper keeps the command and exit code; verdicts were not affected.
+- **Integration-test teardown:** the retained-bucket cleanup passed `--bypass-governance-retention` to buckets without Object Lock, which S3 rejects, and it now also fails on per-object errors instead of looping. The leftover scan now checks every tagged ARN against its own service (the tagging API lists deleted resources for a while) and adds a name-prefix scan. Final result: `LEFTOVERS total=0`.
+- **Docs:**
+  - `SECURITY.md` still described the CI audit as "reported, not blocking";
+  - `mdm-endpoint-enforcement.md`, `agent-runtime-governance.md` and `mdm-test-evidence.md` said that a CI job for the hook and MDM tests was still to be added, although `validate-governance` already runs them;
+  - the `kiro-docs/README.md` index did not list the new evidence page.
 
 ### Changed
 - `mdm-test-evidence.md` and `chaos-pentest-evidence.md` link to the new results for the current scripts and harness.
 - `AGENTS.md`, `CONTRIBUTING.md` and `cdk/README.md`: 91 tests, the npm 10 lockfile rule, the integration test, and `-c egressAllowedDomains=`.
+- **Docs move with the change:** a new rule in `AGENTS.md`, `CONTRIBUTING.md` (pre-pull-request checklist) and `.kiro/steering/repo-map.md`. Every pull request updates `README.md`, `CHANGELOG.md` and every related doc.
+- README: a Start Here entry for the evidence pages, and version 1.9.1 in the footer. `SECURITY.md` and `CONTRIBUTING.md` describe the manual integration test. `cdk/README.md` notes the sandbox deployment test.
 
 ---
 

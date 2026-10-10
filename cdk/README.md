@@ -33,6 +33,8 @@ Only MonitoringStack depends on EncryptionStack (it uses the AuditKey); the othe
 | **ComplianceStack** | 9, 10, 11, 12.2 + PDPA | 19 AWS Config managed rules, optional configuration recorder, Security Hub and IAM Access Analyzer (optional) |
 | **BackupStack** | 8.4 (System Backup and Recovery) | AWS Backup vault (KMS), daily plan for resources tagged `Backup=daily`, 35-day retention |
 
+**Deployment-tested:** all five stacks were deployed and verified in a sandbox account (`env=dev`, default egress and `nat-dns-firewall`) on 2026-10-10, then deleted. The checks covered alarm delivery to the encrypted SNS topic, CloudTrail and flow-log delivery, Object Lock, KMS rotation, and the 19 Config rules (17 evaluating; the 2 RDS rules had no RDS instances in scope). See [`kiro-docs/aws-integration-test-evidence.md`](../kiro-docs/aws-integration-test-evidence.md). Re-test in your own account before production use.
+
 ## Prerequisites
 
 - Node.js 22 LTS (Node.js 20 or later is supported; `aws-cdk-lib` requires `>= 20`)
