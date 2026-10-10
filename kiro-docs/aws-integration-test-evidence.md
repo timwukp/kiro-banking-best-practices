@@ -18,7 +18,7 @@ All required checks pass on the final code of this change (base `main` at 3c181c
 | C2 | `egress.mode = nat-dns-firewall`: DNS Firewall allowlist | egress probe | **13/13 PASS** |
 | K1 | Kiro CLI on a hardened host behind the allowlist | egress probe | **3/3 PASS** (Kiro CLI 2.29.0) |
 | K2 | Kiro end-to-end prompts | egress probe | **SKIP**: no Kiro API key was provided (see [Not covered](#not-covered)) |
-| T1 | Teardown and leftover scan | sandbox account | see [Teardown](#teardown) |
+| T1 | Teardown and leftover scan | sandbox account | **PASS**: `LEFTOVERS total=0`; 5 KMS keys pending deletion (expected) |
 
 ## Environment
 
@@ -52,6 +52,7 @@ Test-tooling fixes (no effect on the product):
 - macOS `tar` added AppleDouble `._*` entries, which the hook-manifest and Windows checks correctly rejected as unsafe file names. Fixed with `COPYFILE_DISABLE=1` plus a guard.
 - Credentials and IMDS are hidden during the L1 synth for CI parity; otherwise the CDK CLI replaces the dummy account with the instance role's account.
 - Re-runs of an SSM label no longer mix earlier outputs into the summary log.
+- Teardown: retained-bucket cleanup and the leftover scan (see [Teardown](#teardown)).
 
 **Detective controls fired on real activity.** During the test, the *unauthorized API calls* alarm (16 access-denied events in 5 minutes) and the *IAM policy changes* alarm went to ALARM on genuine events. The access-denied events came from workloads that already existed in the sandbox account. The policy change was the deployment itself: the CloudFormation execution role attached a managed policy to a role created by the stacks. In both cases the KMS-encrypted SNS topic received the notifications ("Successfully executed action"). None of the access-denied events came from the deployed stacks.
 
@@ -236,7 +237,41 @@ The official installer and its download host (`prod.download.cli.kiro.dev`) work
 
 ## Teardown
 
-_Recorded after teardown in a follow-up commit to this change._
+`run-integration.sh down leftovers`, run after this change's PR was opened (2026-10-10):
+
+```
+probe deleted
+retained resources recorded: 10
+deleted KiroBanking-Backup-dev
+deleted KiroBanking-Compliance-dev
+deleted KiroBanking-Monitoring-dev
+deleted KiroBanking-Network-dev
+deleted KiroBanking-Encryption-dev
+KMS key scheduled for deletion (7 days)                      (x5)
+deleted log group (retained)                                 (x2)
+deleted bucket (retained)                                    (audit-log bucket, Object Lock GOVERNANCE)
+deleted backup vault (retained)
+harness deleted (instances terminated)
+```
+
+The first pass left one retained bucket behind. The cleanup passed `--bypass-governance-retention` to every bucket, and S3 rejects that flag on a bucket without Object Lock (the access-log bucket). `empty_bucket` now passes the flag only when Object Lock is enabled, and fails on per-object errors instead of looping. The bucket was then deleted with the fixed code.
+
+Final leftover scan:
+
+```
+STALE ec2:instance (deleted; tagging API not yet updated)        (x3)
+STALE ec2:natgateway (deleted; tagging API not yet updated)
+STALE ec2:vpc-endpoint (deleted; tagging API not yet updated)    (x5)
+STALE ec2:vpc-flow-log (deleted; tagging API not yet updated)
+EXPECTED kms:key PendingDeletion                                 (x5)
+LEFTOVERS total=0
+```
+
+- The Resource Groups Tagging API keeps listing deleted resources for a while. `leftovers` now checks every tagged ARN against its own service and reports it as `STALE` only when that service says it is gone (terminated, deleted or not found).
+- A name-prefix scan (`kiro-banking`, `KiroBanking`, `kiro-fsi-test`) found nothing. It covers S3 buckets, log groups, KMS aliases, backup vaults and plans, SNS topics, alarms, Config rules, trails, Access Analyzer, EventBridge rules, DNS Firewall rule groups and domain lists, IAM roles and SSM parameters.
+- No test instances are pending, running, stopping or stopped.
+- The 5 customer-managed KMS keys are in `PendingDeletion` (7-day window, ending 2026-10-17). AWS deletes them automatically.
+- The account resources that existed before the test are unchanged: the GuardDuty detector, Security Hub, the Config recorder (still recording), the CDK bootstrap stack, and the account's multi-region CloudTrail trail (still logging). The CDK bootstrap was not created by the test, so it was not removed.
 
 ## Reproduce
 

@@ -43,7 +43,7 @@ bash security-tests/aws-integration/run-integration.sh deploy verify egress
 bash security-tests/aws-integration/run-integration.sh down leftovers
 ```
 
-State and raw logs go to `$IT_WORKDIR` (default `$TMPDIR/kiro-fsi-it`) and are **never committed**. When summarising results, the orchestrator masks account IDs, instance and resource IDs, and IP addresses. Tear down with `down` even after a failed run; `leftovers` must report `LEFTOVERS total=0`, with KMS keys pending deletion listed as `EXPECTED`.
+State and raw logs go to `$IT_WORKDIR` (default `$TMPDIR/kiro-fsi-it`) and are **never committed**. When summarising results, the orchestrator masks account IDs, instance and resource IDs, and IP addresses. Tear down with `down` even after a failed run; `leftovers` must report `LEFTOVERS total=0`. KMS keys pending deletion are listed as `EXPECTED`. Resources that the Resource Groups Tagging API still lists but that their own service reports as deleted are listed as `STALE`. A name-prefix scan also covers untagged and retained resources.
 
 The test-only DNS Firewall additions (SSM, the results bucket and the AL2023 package mirrors, passed with `-c egressAllowedDomains=`) exist only to drive the probe. A production allowlist does not need them.
 

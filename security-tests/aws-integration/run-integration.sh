@@ -40,7 +40,7 @@ save() { # key value
 }
 aws_() { aws --region "$R" --output json "$@"; }
 out() { aws_ cloudformation describe-stacks --stack-name "$1" --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text; }
-mask() { sed -E 's/[0-9]{12}/<account>/g; s/i-[0-9a-f]{8,17}/<instance>/g; s/(vpc|subnet|sg|acl|vpce|nat|igw|rtb)-[0-9a-f]{8,17}/\1-<id>/g; s/[0-9]{1,3}(\.[0-9]{1,3}){3}/<ip>/g'; }
+mask() { sed -E 's/[0-9]{12}/<account>/g; s/i-[0-9a-f]{8,17}/<instance>/g; s/(vpc|subnet|sg|acl|vpce|nat|igw|rtb|fl|eni|eipalloc|vol)-[0-9a-f]{8,17}/\1-<id>/g; s/[0-9]{1,3}(\.[0-9]{1,3}){3}/<ip>/g'; }
 
 # --------------------------------------------------------------------- helpers: SSM
 wait_ssm_online() { # instance-id
@@ -262,13 +262,19 @@ st_egress() {
   ssm_run "$PROBE_ID" AWS-RunShellScript probe-kiro "$(linux_cmd kiro)" 2400 || RC=1
 }
 empty_bucket() { # bucket (versioned / Object Lock aware)
-  local b="$1"
+  local b="$1" bypass="" resp
   aws_ s3api head-bucket --bucket "$b" >/dev/null 2>&1 || return 0
+  # S3 rejects --bypass-governance-retention on buckets without Object Lock.
+  aws_ s3api get-object-lock-configuration --bucket "$b" >/dev/null 2>&1 && bypass="--bypass-governance-retention"
   while :; do
     batch="$(aws_ s3api list-object-versions --bucket "$b" --max-items 500 \
       | jq -c '{Objects: ([(.Versions // [])[], (.DeleteMarkers // [])[]] | map({Key, VersionId})), Quiet: true}')"
     [ "$(echo "$batch" | jq '.Objects | length')" = 0 ] && break
-    aws_ s3api delete-objects --bucket "$b" --delete "$batch" --bypass-governance-retention >/dev/null || return 1
+    # shellcheck disable=SC2086
+    resp="$(aws_ s3api delete-objects --bucket "$b" --delete "$batch" $bypass)" || return 1
+    # Per-object failures (e.g. COMPLIANCE-mode retention) return exit 0 with an Errors list.
+    [ "$(printf '%s' "$resp" | jq -s 'map((.Errors // []) | length) | add // 0')" = 0 ] \
+      || { printf '%s' "$resp" | jq -r '.Errors[0].Code' >&2; return 1; }
   done
   aws_ s3api delete-bucket --bucket "$b"
 }
@@ -307,22 +313,63 @@ st_down() {
     aws_ cloudformation delete-stack --stack-name "$HARNESS"; aws_ cloudformation wait stack-delete-complete --stack-name "$HARNESS" && log "harness deleted (instances terminated)"
   fi
 }
+live_state() { # arn -> "gone", "PendingDeletion" or a live state. The tagging API lists deleted
+  # resources for a while, so every tagged ARN is checked against its own service.
+  local arn="$1" id="${1##*/}" out
+  case "$arn" in
+    arn:aws:kms:*) out="$(aws_ kms describe-key --key-id "$arn" --query KeyMetadata.KeyState --output text 2>&1)" ;;
+    *:instance/*) out="$(aws_ ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].State.Name' --output text 2>&1)" ;;
+    *:natgateway/*) out="$(aws_ ec2 describe-nat-gateways --nat-gateway-ids "$id" --query 'NatGateways[0].State' --output text 2>&1)" ;;
+    *:vpc-endpoint/*) out="$(aws_ ec2 describe-vpc-endpoints --vpc-endpoint-ids "$id" --query 'VpcEndpoints[0].State' --output text 2>&1)" ;;
+    *:subnet/*) out="$(aws_ ec2 describe-subnets --subnet-ids "$id" --query 'Subnets[0].State' --output text 2>&1)" ;;
+    *:vpc/*) out="$(aws_ ec2 describe-vpcs --vpc-ids "$id" --query 'Vpcs[0].State' --output text 2>&1)" ;;
+    *:vpc-flow-log/*) out="$(aws_ ec2 describe-flow-logs --flow-log-ids "$id" --query 'FlowLogs[0].FlowLogStatus' --output text 2>&1)" ;;
+    arn:aws:s3:::*) aws_ s3api head-bucket --bucket "${arn#arn:aws:s3:::}" >/dev/null 2>&1 && out=present || out=NotFound ;;
+    *) out=unchecked ;;   # unknown type: reported as a leftover for a human to check
+  esac
+  case "$out" in
+    *NotFound*|*NotFoundException*|terminated|deleted|None|"") echo gone ;;
+    *) echo "$out" | tail -1 ;;
+  esac
+}
+name_scan() { # name-prefix scan for retained or untagged resources the tag scan can miss
+  local pat='kiro-banking|KiroBanking|kiro-fsi-test'
+  aws_ s3api list-buckets --query 'Buckets[].Name' | jq -r '.[]' | grep -E "^($pat)" | sed 's/^/LEFTOVER s3-bucket /'
+  aws_ logs describe-log-groups --query 'logGroups[].logGroupName' | jq -r '.[]' | grep -E "$pat" | sed 's/^/LEFTOVER log-group /'
+  aws_ kms list-aliases --query 'Aliases[].AliasName' | jq -r '.[]' | grep -E "$pat" | sed 's/^/LEFTOVER kms-alias /'
+  aws_ backup list-backup-vaults --query 'BackupVaultList[].BackupVaultName' | jq -r '.[]' | grep -E "$pat" | sed 's/^/LEFTOVER backup-vault /'
+  aws_ backup list-backup-plans --query 'BackupPlansList[].BackupPlanName' | jq -r '.[]' | grep -E "$pat" | sed 's/^/LEFTOVER backup-plan /'
+  aws_ sns list-topics --query 'Topics[].TopicArn' | jq -r '.[]' | grep -E "$pat" | sed -E 's/.*:/LEFTOVER sns-topic /'
+  aws_ cloudwatch describe-alarms --alarm-name-prefix kiro-banking --query 'MetricAlarms[].AlarmName' | jq -r '.[]' | sed 's/^/LEFTOVER alarm /'
+  aws_ configservice describe-config-rules --query 'ConfigRules[].ConfigRuleName' | jq -r '.[]' | grep -E '^(mas-trm-|pdpa-rds-)' | sed 's/^/LEFTOVER config-rule /'
+  aws_ cloudtrail describe-trails --query 'trailList[].Name' | jq -r '.[]' | grep -E "$pat" | sed 's/^/LEFTOVER trail /'
+  aws_ accessanalyzer list-analyzers --query 'analyzers[].name' | jq -r '.[]' | grep -E "$pat" | sed 's/^/LEFTOVER access-analyzer /'
+  aws_ events list-rules --query 'Rules[].Name' | jq -r '.[]' | grep -E "$pat" | sed 's/^/LEFTOVER event-rule /'
+  aws_ route53resolver list-firewall-rule-groups --query 'FirewallRuleGroups[].Name' | jq -r '.[]' | grep -E "$pat" | sed 's/^/LEFTOVER dns-firewall-rule-group /'
+  aws_ route53resolver list-firewall-domain-lists --query 'FirewallDomainLists[].Name' | jq -r '.[]' | grep -E "$pat" | sed 's/^/LEFTOVER dns-firewall-domain-list /'
+  aws_ iam list-roles --query 'Roles[].RoleName' | jq -r '.[]' | grep -E "^($pat)" | sed 's/^/LEFTOVER iam-role /'
+  aws_ ssm describe-parameters --parameter-filters Key=Name,Option=BeginsWith,Values=/kiro-fsi-test/ --query 'Parameters[].Name' | jq -r '.[]' | sed 's/^/LEFTOVER ssm-parameter /'
+}
 st_leftovers() {
   local n=0
   for s in $STACKS $HARNESS $PROBE; do
     st="$(aws_ cloudformation describe-stacks --stack-name "$s" --query 'Stacks[0].StackStatus' --output text 2>/dev/null)"
     [ -n "$st" ] && { echo "LEFTOVER stack $s $st"; n=$((n+1)); }
   done
-  for tag in kiro-fsi-test kiro-banking; do
-    aws_ resourcegroupstaggingapi get-resources --tag-filters "Key=Project,Values=$tag" --query 'ResourceTagMappingList[].ResourceARN' \
-      | jq -r '.[]' | while read -r arn; do
-        case "$arn" in
-          arn:aws:kms:*) ks="$(aws_ kms describe-key --key-id "$arn" --query KeyMetadata.KeyState --output text 2>/dev/null)"
-                         [ "$ks" = PendingDeletion ] && echo "EXPECTED kms-key PendingDeletion" || echo "LEFTOVER $(echo "$arn" | mask) ($ks)" ;;
-          *) echo "LEFTOVER $(echo "$arn" | mask)" ;;
-        esac
-      done
-  done | tee "$W/logs/leftovers.txt"
+  {
+    for tag in kiro-fsi-test kiro-banking; do
+      aws_ resourcegroupstaggingapi get-resources --tag-filters "Key=Project,Values=$tag" --query 'ResourceTagMappingList[].ResourceARN' \
+        | jq -r '.[]' | while read -r arn; do
+          ls="$(live_state "$arn")"; typ="$(echo "$arn" | cut -d: -f3,6 | sed -E 's#/.*##; s#^s3:.*#s3:bucket#')"
+          case "$ls" in
+            gone) echo "STALE $typ (deleted; tagging API not yet updated)" ;;
+            PendingDeletion) echo "EXPECTED $typ PendingDeletion" ;;
+            *) echo "LEFTOVER $typ ($ls)" ;;
+          esac
+        done
+    done
+    name_scan
+  } | mask | tee "$W/logs/leftovers.txt"
   n=$((n + $(grep -c '^LEFTOVER' "$W/logs/leftovers.txt" || true)))
   aws_ ec2 describe-instances --filters "Name=tag:Project,Values=kiro-fsi-test" "Name=instance-state-name,Values=pending,running,stopping,stopped" --query 'length(Reservations[].Instances[])' \
     | grep -q '^0$' || { echo "LEFTOVER running test instances"; n=$((n+1)); }
