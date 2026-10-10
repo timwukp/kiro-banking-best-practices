@@ -43,7 +43,7 @@ Financial institutions face unique challenges when adopting AI development tools
 - **Audit Requirements** - Complete audit trails for all AI-assisted development activities
 - **Network Security** - No inbound internet exposure and tightly controlled, allowlisted outbound connectivity
 
-This guide addresses these challenges with practical reference implementations (validated by unit tests, cdk-nag and synth; not a substitute for your own testing).
+This guide addresses these challenges with practical reference implementations (validated by unit tests, cdk-nag, synth and an integration test in a sandbox AWS account; not a substitute for your own testing).
 
 ---
 
@@ -122,6 +122,7 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 ### 🧪 Adversarial Validation
 - Chaos / penetration harness: a non-privileged user and the Kiro agent try to bypass the controls (for example with quoted or indirect shell commands that glob rules miss)
 - Sanitized evidence in [`kiro-docs/chaos-pentest-evidence.md`](kiro-docs/chaos-pentest-evidence.md); re-run after each Kiro upgrade, because permission and hook behaviour changes between releases
+- Integration test in a sandbox AWS account ([`security-tests/aws-integration/`](security-tests/aws-integration/README.md)): disposable SSM-only EC2 runners, a real deployment of all five CDK stacks, the root and SYSTEM MDM lockdowns, the full chaos harness, the `nat-dns-firewall` egress mode and the Kiro CLI behind the allowlist, then a verified teardown. Results in [`kiro-docs/aws-integration-test-evidence.md`](kiro-docs/aws-integration-test-evidence.md)
 
 ---
 
@@ -141,6 +142,7 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 | **[kiro-docs/mdm-endpoint-enforcement.md](kiro-docs/mdm-endpoint-enforcement.md)** | MDM deployment and drift detection for `managed-settings.json` and global hooks across Windows, macOS, Linux and VDI | ✅ Complete |
 | **[kiro-docs/mdm-test-evidence.md](kiro-docs/mdm-test-evidence.md)** | Sanitized Windows/macOS/Linux lockdown test results | ✅ Complete |
 | **[kiro-docs/chaos-pentest-evidence.md](kiro-docs/chaos-pentest-evidence.md)** | Chaos/pentest: non-privileged human + agent vs controls (findings + recommendations) | ✅ Complete |
+| **[kiro-docs/aws-integration-test-evidence.md](kiro-docs/aws-integration-test-evidence.md)** | Sanitized results of the sandbox-account integration test: real CDK deployment, Linux/Windows MDM, chaos harness, DNS Firewall egress, Kiro CLI, teardown | ✅ Complete |
 | **[SECURITY.md](SECURITY.md)** | Security vulnerability reporting policy | ✅ Complete |
 
 ### Kiro Skills (Reference Implementations)
@@ -645,6 +647,7 @@ For questions, issues, or feedback:
 | 1.7 | 2026-06-04 | Agent Runtime Governance (Layer 4 hooks/agent/audit), security-governance-features reference, CI fixes, AGENTS.md + Kiro-targeting refactor + steering map, QUICK-REFERENCE rename |
 | 1.8 | 2026-06-05 | MDM endpoint enforcement (`mdm/`), `destructive-fs-guard` hook, chaos/pentest harness and evidence, Key Features update (later corrected in 1.9) |
 | 1.9 | 2026-10-09 | Repository renamed to `kiro-fsi-best-practices`. Correction release: MAS regulatory citations (TRM remap, FSM-N05 1 h / 14 days, Notice 658, AI Risk Management Guidelines), data location (no Singapore profile region) and allowlisted egress, Kiro 1.x governance (`managed-settings/`, fail-closed hooks), CDK hardening (5 stacks, 19 Config rules, 86 tests), tested PII patterns, Mermaid diagrams, CI on Node.js 22 |
+| 1.9.1 | 2026-10-10 | Integration test in a sandbox AWS account (real deployment of all 5 stacks, Linux/Windows MDM, chaos harness, DNS Firewall egress, Kiro CLI) and the fixes it found: dependency upgrade with no high/critical `npm audit` findings and a blocking CI audit, ESLint 9, npm 10 lockfile, `-c egressAllowedDomains=`, scoped RDS Config rules, chaos evidence records, 91 tests |
 
 ---
 

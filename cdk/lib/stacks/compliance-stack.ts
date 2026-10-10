@@ -199,6 +199,7 @@ export class ComplianceStack extends cdk.Stack {
       identifier: 'RDS_STORAGE_ENCRYPTED',
       configRuleName: `pdpa-rds-encryption-${envConfig.environment}`,
       description: 'PDPA: Ensure RDS instances have encryption at rest for personal data protection',
+      ruleScope: config.RuleScope.fromResources([config.ResourceType.RDS_DB_INSTANCE]),
     });
 
     // RDS public access
@@ -206,6 +207,7 @@ export class ComplianceStack extends cdk.Stack {
       identifier: 'RDS_INSTANCE_PUBLIC_ACCESS_CHECK',
       configRuleName: `pdpa-rds-no-public-${envConfig.environment}`,
       description: 'PDPA: Ensure RDS instances are not publicly accessible',
+      ruleScope: config.RuleScope.fromResources([config.ResourceType.RDS_DB_INSTANCE]),
     });
 
     // ═══════════════════════════════════════════════════════════
@@ -332,7 +334,7 @@ export class ComplianceStack extends cdk.Stack {
       s3KmsKeyArn: bucketKey.keyArn,
       configSnapshotDeliveryProperties: { deliveryFrequency: 'TwentyFour_Hours' },
     });
-    deliveryChannel.addDependency(recorder);
+    deliveryChannel.addResourceDependency(recorder);
     deliveryChannel.node.addDependency(role, bucket);
 
     NagSuppressions.addResourceSuppressions(role, [

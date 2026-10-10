@@ -104,6 +104,14 @@ dev() {
   return 0
 }
 
+# devo <command>: dev() with its output captured in OUT. Use this instead of OUT="$(dev ...)":
+# a command substitution runs dev() in a subshell, which loses RC and LAST_CMD, so the evidence
+# record would show the previous step's command.
+devo() {
+  dev "$1" > "$S/.dev-out"
+  OUT="$(cat "$S/.dev-out")"
+}
+
 # sanity <description> <ok 0|1>: a non-attack check (for example "an allowed command still passes").
 # Failures are reported separately from bypasses.
 sanity() {

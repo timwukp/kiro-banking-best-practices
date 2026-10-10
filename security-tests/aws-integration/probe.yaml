@@ -1,0 +1,55 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  kiro-fsi-best-practices - egress probe. A disposable Linux instance placed in the CDK
+  NetworkStack's WorkSpaces subnet (egress.mode = nat-dns-firewall) to test the Route 53
+  Resolver DNS Firewall allowlist and Kiro CLI sign-in paths. SSM-only, no inbound rules,
+  IMDSv2, encrypted volume, terminate-on-shutdown with a failsafe timer.
+
+Parameters:
+  VpcId: { Type: 'AWS::EC2::VPC::Id' }
+  SubnetId: { Type: 'AWS::EC2::Subnet::Id' }
+  InstanceProfileName: { Type: String }
+  LinuxAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  InstanceType: { Type: String, Default: t3.small }
+  FailsafeMinutes: { Type: Number, Default: 240, MinValue: 30, MaxValue: 1440 }
+
+Resources:
+  ProbeSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: kiro-fsi-test egress probe - no inbound; outbound HTTPS/HTTP only
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: 'HTTPS' }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: 'HTTP (negative tests)' }
+      Tags: [{ Key: Project, Value: kiro-fsi-test }]
+
+  Probe:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LinuxAmi
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfileName
+      InstanceInitiatedShutdownBehavior: terminate
+      MetadataOptions: { HttpEndpoint: enabled, HttpTokens: required, HttpPutResponseHopLimit: 1 }
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          SubnetId: !Ref SubnetId
+          GroupSet: [!Ref ProbeSg]
+          AssociatePublicIpAddress: false     # private subnet; egress via the NAT gateway
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 20, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          shutdown -h +${FailsafeMinutes} "kiro-fsi-test failsafe" || true
+      Tags:
+        - { Key: Name, Value: kiro-fsi-test-egress-probe }
+        - { Key: Project, Value: kiro-fsi-test }
+        - { Key: Role, Value: egress-probe }
+
+Outputs:
+  ProbeInstanceId: { Value: !Ref Probe }

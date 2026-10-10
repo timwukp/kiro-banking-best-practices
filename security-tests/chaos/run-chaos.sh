@@ -95,13 +95,13 @@ GUARD
 
   # B. Privilege probing.
   dev "sudo -n true" >/dev/null; judge B1 human "non-interactive sudo" BLOCKED "$([ "$RC" -ne 0 ] && echo 1 || echo 0)" "rc=$RC"
-  Wd="$(dev "find '$GBIN' /usr/local/bin /usr/bin -maxdepth 1 -writable 2>/dev/null | head -1")"
+  devo "find '$GBIN' /usr/local/bin /usr/bin -maxdepth 1 -writable 2>/dev/null | head -1"; Wd="$OUT"
   judge B2 human "writable file or directory on PATH" BLOCKED "$([ -z "$Wd" ] && echo 1 || echo 0)" "${Wd:-none}"
 
   # C. Command-guard and audit evasion.
-  O="$(dev "cd '$S' && git push --force 2>&1")"; judge C0 human "force-push through the demo PATH guard" BLOCKED "$(echo "$O" | grep -q POLICY && echo 1 || echo 0)" "$(echo "$O" | grep -q POLICY && echo policy || echo no-policy)"
-  O="$(dev "cd '$S' && /usr/bin/git push --force 2>&1")"; judge C1 human "real git by absolute path (bypasses a PATH guard)" GAP "$(echo "$O" | grep -q POLICY && echo 1 || echo 0)" "$(echo "$O" | grep -q POLICY && echo policy || echo guard-bypassed)"
-  O="$(dev "cp /usr/bin/git \$HOME/mygit && chmod +x \$HOME/mygit && cd '$S' && \$HOME/mygit push --force 2>&1")"; judge C2 human "own copy of the git binary" GAP "$(echo "$O" | grep -q POLICY && echo 1 || echo 0)" "$(echo "$O" | grep -q POLICY && echo policy || echo guard-bypassed)"
+  devo "cd '$S' && git push --force 2>&1"; O="$OUT"; judge C0 human "force-push through the demo PATH guard" BLOCKED "$(echo "$O" | grep -q POLICY && echo 1 || echo 0)" "$(echo "$O" | grep -q POLICY && echo policy || echo no-policy)"
+  devo "cd '$S' && /usr/bin/git push --force 2>&1"; O="$OUT"; judge C1 human "real git by absolute path (bypasses a PATH guard)" GAP "$(echo "$O" | grep -q POLICY && echo 1 || echo 0)" "$(echo "$O" | grep -q POLICY && echo policy || echo guard-bypassed)"
+  devo "cp /usr/bin/git \$HOME/mygit && chmod +x \$HOME/mygit && cd '$S' && \$HOME/mygit push --force 2>&1"; O="$OUT"; judge C2 human "own copy of the git binary" GAP "$(echo "$O" | grep -q POLICY && echo 1 || echo 0)" "$(echo "$O" | grep -q POLICY && echo policy || echo guard-bypassed)"
   before="$(wc -l < "$AUDIT")"
   dev "KIRO_AUDIT_LOG=/dev/null bash '$HOOKD/audit-logger.sh' <<< '{\"hook_event_name\":\"postToolUse\",\"tool_name\":\"execute_bash\",\"tool_input\":{\"command\":\"ls\"}}'" >/dev/null
   judge C3 human "redirect the hook audit log (KIRO_AUDIT_LOG=/dev/null)" GAP "$([ "$(wc -l < "$AUDIT")" -gt "$before" ] && echo 1 || echo 0)" "lines $before -> $(wc -l < "$AUDIT")"

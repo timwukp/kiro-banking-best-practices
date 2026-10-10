@@ -64,6 +64,9 @@ npx cdk diff
 npx cdk synth -c env=dev -c egress=nat-dns-firewall   # self-contained filtered egress
 npx cdk synth -c env=dev -c region=us-east-1          # workload in the Kiro profile region
 npx cdk synth -c env=dev -c createConfigRecorder=true # also create the AWS Config recorder
+# Extra DNS Firewall allowlist entries for one run (exact hostnames or *.-wildcards; a bare * is rejected)
+npx cdk synth -c env=dev -c egress=nat-dns-firewall \
+  -c egressAllowedDomains=ssm.ap-southeast-1.amazonaws.com,ssmmessages.ap-southeast-1.amazonaws.com
 ```
 
 ### Build
@@ -191,7 +194,7 @@ GuardDuty findings are routed to the same topic by an EventBridge rule.
 
 **MAS TRM 12.2 - Cyber Event Monitoring and Detection (audit logging):** CloudTrail enabled, log validation, CloudTrail encrypted. These logs serve as evidence for the independent IT audit function (TRM 15.1). The rule names keep their original `mas-trm-15-` prefix.
 
-**PDPA:** RDS encryption, RDS no public access
+**PDPA:** RDS encryption, RDS no public access. Both rules are scoped to `AWS::RDS::DBInstance`; in an account without RDS instances they report no evaluations (nothing in scope) rather than an error.
 
 The `ComplianceRuleCount` stack output reports the number of rules (19).
 

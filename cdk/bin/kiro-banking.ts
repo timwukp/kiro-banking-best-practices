@@ -9,6 +9,7 @@ import { MonitoringStack } from '../lib/stacks/monitoring-stack';
 import { ComplianceStack } from '../lib/stacks/compliance-stack';
 import { BackupStack } from '../lib/stacks/backup-stack';
 import { prodConfig, devConfig, EGRESS_MODES, EgressMode, KiroBankingConfig } from '../config/environments';
+import { parseAllowedDomainsContext } from '../config/kiro-endpoints';
 
 const app = new cdk.App();
 
@@ -20,6 +21,8 @@ let config: KiroBankingConfig = envName === 'prod' ? prodConfig : devConfig;
 //   -c region=<aws-region>       workload region for all stacks (e.g. us-east-1 to
 //                                create the Kiro endpoints in the Kiro profile region)
 //   -c egress=nat-dns-firewall   egress mode (none | nat-dns-firewall)
+//   -c egressAllowedDomains=a,b  extra DNS Firewall allowlist entries (nat-dns-firewall),
+//                                e.g. SSM/S3 hostnames for an operations instance
 //   -c createConfigRecorder=true | -c enableGuardDuty=false |
 //   -c enableSecurityHub=false   | -c enableAccessAnalyzer=false
 //                                account-level singletons (see KiroBankingConfig)
@@ -37,6 +40,14 @@ if (egressOverride !== undefined) {
     throw new Error(`Invalid -c egress=${String(egressOverride)} (expected one of: ${EGRESS_MODES.join(', ')})`);
   }
   config = { ...config, egress: { ...config.egress, mode: egressOverride as EgressMode } };
+}
+
+const extraDomains = parseAllowedDomainsContext(app.node.tryGetContext('egressAllowedDomains'));
+if (extraDomains.length > 0) {
+  config = {
+    ...config,
+    egress: { ...config.egress, allowedDomains: [...config.egress.allowedDomains, ...extraDomains] },
+  };
 }
 
 const BOOLEAN_OVERRIDES = ['createConfigRecorder', 'enableGuardDuty', 'enableSecurityHub', 'enableAccessAnalyzer'] as const;
@@ -77,7 +88,7 @@ const monitoringStack = new MonitoringStack(app, `KiroBanking-Monitoring-${confi
   kmsKey: encryptionStack.auditKey,
   description: 'CloudTrail audit logging and CloudWatch monitoring (MAS TRM 12.2 Cyber Event Monitoring and Detection)',
 });
-monitoringStack.addDependency(encryptionStack);
+monitoringStack.addStackDependency(encryptionStack);
 
 // --- Compliance Stack (AWS Config rules) ---
 const complianceStack = new ComplianceStack(app, `KiroBanking-Compliance-${config.environment}`, {

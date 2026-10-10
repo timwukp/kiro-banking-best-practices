@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  kiro-fsi-best-practices - disposable, isolated integration-test harness.
+  Linux and Windows runners reachable ONLY through AWS Systems Manager (no inbound rules,
+  no SSH keys), IMDSv2 only, encrypted volumes, terminate-on-shutdown with an on-instance
+  failsafe timer, and a short-lived results bucket. Deploy into a SANDBOX account only.
+
+Parameters:
+  LinuxAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  WindowsAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-windows-latest/Windows_Server-2022-English-Full-Base
+  InstanceType:
+    Type: String
+    Default: t3.medium
+  CreateWindows:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  FailsafeMinutes:
+    Type: Number
+    Default: 480
+    MinValue: 30
+    MaxValue: 1440
+    Description: On-instance shutdown timer (instances terminate on shutdown).
+
+Conditions:
+  WantWindows: !Equals [!Ref CreateWindows, 'true']
+
+Resources:
+  # ---------------------------------------------------------------- results bucket
+  ResultsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: 'aws:kms' }   # AWS managed key aws/s3
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-test-artifacts
+            Status: Enabled
+            ExpirationInDays: 7
+      Tags: [{ Key: Project, Value: kiro-fsi-test }]
+
+  ResultsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ResultsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: [!GetAtt ResultsBucket.Arn, !Sub '${ResultsBucket.Arn}/*']
+            Condition: { Bool: { 'aws:SecureTransport': 'false' } }
+
+  # ---------------------------------------------------------------- network
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.250.0.0/24
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: [{ Key: Name, Value: kiro-fsi-test-vpc }, { Key: Project, Value: kiro-fsi-test }]
+
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: [{ Key: Project, Value: kiro-fsi-test }]
+
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: { VpcId: !Ref Vpc, InternetGatewayId: !Ref Igw }
+
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.250.0.0/26
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags: [{ Key: Name, Value: kiro-fsi-test-public }, { Key: Project, Value: kiro-fsi-test }]
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Project, Value: kiro-fsi-test }]
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties: { RouteTableId: !Ref RouteTable, DestinationCidrBlock: 0.0.0.0/0, GatewayId: !Ref Igw }
+
+  SubnetRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref Subnet, RouteTableId: !Ref RouteTable }
+
+  RunnerSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: kiro-fsi-test runners - no inbound; outbound HTTPS/HTTP only
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: 'HTTPS (SSM, S3, package registries)' }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: 'HTTP (OS package mirrors)' }
+      Tags: [{ Key: Project, Value: kiro-fsi-test }]
+
+  # ---------------------------------------------------------------- IAM (least privilege)
+  RunnerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore'
+      Policies:
+        - PolicyName: results-bucket-and-test-parameters
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ['s3:GetObject', 's3:PutObject']
+                Resource: !Sub '${ResultsBucket.Arn}/*'
+              - Effect: Allow
+                Action: 's3:ListBucket'
+                Resource: !GetAtt ResultsBucket.Arn
+              - Effect: Allow
+                Action: ['ssm:GetParameter']
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kiro-fsi-test/*'
+      Tags: [{ Key: Project, Value: kiro-fsi-test }]
+
+  RunnerProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: { Roles: [!Ref RunnerRole] }
+
+  # ---------------------------------------------------------------- instances
+  LinuxRunner:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LinuxAmi
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref RunnerProfile
+      InstanceInitiatedShutdownBehavior: terminate
+      MetadataOptions: { HttpEndpoint: enabled, HttpTokens: required, HttpPutResponseHopLimit: 1 }
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          SubnetId: !Ref Subnet
+          GroupSet: [!Ref RunnerSg]
+          AssociatePublicIpAddress: true      # outbound only; the security group has no inbound rules
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 30, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Failsafe: power off (=> terminate) even if the orchestrator never tears down.
+          shutdown -h +${FailsafeMinutes} "kiro-fsi-test failsafe" || true
+      Tags:
+        - { Key: Name, Value: kiro-fsi-test-linux }
+        - { Key: Project, Value: kiro-fsi-test }
+        - { Key: Role, Value: linux-runner }
+
+  WindowsRunner:
+    Type: AWS::EC2::Instance
+    Condition: WantWindows
+    Properties:
+      ImageId: !Ref WindowsAmi
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref RunnerProfile
+      InstanceInitiatedShutdownBehavior: terminate
+      MetadataOptions: { HttpEndpoint: enabled, HttpTokens: required, HttpPutResponseHopLimit: 1 }
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          SubnetId: !Ref Subnet
+          GroupSet: [!Ref RunnerSg]
+          AssociatePublicIpAddress: true
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs: { VolumeSize: 50, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true }
+      UserData:
+        Fn::Base64: !Sub |
+          <powershell>
+          # Failsafe: power off (=> terminate) even if the orchestrator never tears down.
+          $seconds = [int]'${FailsafeMinutes}' * 60
+          shutdown.exe /s /t $seconds /c "kiro-fsi-test failsafe" /d p:0:0
+          </powershell>
+      Tags:
+        - { Key: Name, Value: kiro-fsi-test-windows }
+        - { Key: Project, Value: kiro-fsi-test }
+        - { Key: Role, Value: windows-runner }
+
+Outputs:
+  ResultsBucketName: { Value: !Ref ResultsBucket }
+  LinuxInstanceId: { Value: !Ref LinuxRunner }
+  WindowsInstanceId:
+    Condition: WantWindows
+    Value: !Ref WindowsRunner
+  RunnerProfileName: { Value: !Ref RunnerProfile }
+  RunnerRoleName: { Value: !Ref RunnerRole }

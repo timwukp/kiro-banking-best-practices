@@ -112,11 +112,10 @@ jobs:
 
       - name: Security audit
         working-directory: cdk
-        # continue-on-error is intentional: CDK transitive dependencies frequently have
-        # advisories that are not exploitable in an IaC context. Audit results are reviewed
-        # manually rather than blocking the pipeline for non-actionable findings.
+        # Blocking gate: the lockfile has no high or critical advisories (moderate ones are
+        # reviewed manually). Fix a new finding by upgrading the dependency or with `npm audit fix`;
+        # do not reintroduce continue-on-error.
         run: npm audit --audit-level=high
-        continue-on-error: true
 
       - name: TypeScript compile check
         working-directory: cdk
