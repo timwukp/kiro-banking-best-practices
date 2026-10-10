@@ -65,6 +65,7 @@ New here? Use the map below to jump straight to what you need. **AI agents:** se
 | Install the defense-in-depth hooks and the reference agent | [`agent-hooks/README.md`](agent-hooks/README.md) |
 | Deploy the AWS infrastructure | [`cdk/`](cdk/) |
 | Check MAS TRM coverage | [Compliance Framework](#compliance-framework) |
+| Validate the controls (chaos harness, integration test in a sandbox AWS account) and read the evidence | [`kiro-docs/aws-integration-test-evidence.md`](kiro-docs/aws-integration-test-evidence.md), [`kiro-docs/chaos-pentest-evidence.md`](kiro-docs/chaos-pentest-evidence.md) |
 
 > **What Kiro enforces:** the admin rules and sign-in restriction in `managed-settings.json` ([`managed-settings/`](managed-settings/)), the Kiro console settings (model allow list, MCP governance and registry, web tools, API keys, Cloud Sessions), workspace trust and Kiro's hardcoded invariants. User `permissions.yaml`, agent permissions and hooks are **defense in depth**. Everything under `.kiro/steering/` and `.kiro/skills/` is **guidance**, not an enforced boundary. All Kiro controls run on the developer's machine, so a user with local administrator rights can bypass them; the endpoint controls and server-side boundaries (branch protection, IAM, egress allowlist) keep them meaningful.
 
@@ -651,6 +652,6 @@ For questions, issues, or feedback:
 
 ---
 
-**Version:** 1.9
-**Last Updated:** October 9, 2026
+**Version:** 1.9.1
+**Last Updated:** October 10, 2026
 **Maintained By:** Security Architecture Team

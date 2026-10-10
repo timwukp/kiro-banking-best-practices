@@ -31,6 +31,7 @@ MAS-aligned best practices for deploying **AWS Kiro** in Singapore **financial s
 - **Admin rules (`managed-settings*.json`) use only `deny` or `ask`** and only the documented fields; an `allow` rule or unknown field makes Kiro reject the whole file and deny all tool calls.
 - **Kiro claims:** cite the official kiro.dev page with a verification date; where pages conflict, follow the newer one and note the conflict. Do not call a control "tamper-proof" or "fail-closed" unless Kiro documents it as such.
 - **Changes go through a pull request** from a feature branch; never push to `main`. CI (`.github/workflows/validate.yml`) must pass. Run the commands below first.
+- **Docs move with the change:** in the same pull request, update `README.md`, `CHANGELOG.md` and every doc that describes the changed behaviour, command, count or status. That includes `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md` (CI description), component READMEs, the `kiro-docs/README.md` index and the evidence pages. Search for the old wording (`grep -rn`) before you finish. If a follow-up is needed, open a new pull request.
 - Default to **least privilege**.
 
 ## Commands (run from the repo root; CI runs the same)

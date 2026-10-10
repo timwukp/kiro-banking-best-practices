@@ -95,12 +95,12 @@ The workspace stays writable for the developer, so protection is layered: the ad
 
 ## Testing
 
-- **Dry-run tests (no root, no system changes, safe for CI):** `bash mdm/tests/test-lockdown.sh` and `bash mdm/tests/test-lockdown-macos.sh` validate the shipped policy JSON, `agent-hooks/SHA256SUMS`, the planned actions and the refusal of bad input (allow rules, malformed JSON, BOM, UTF-16, tampered hooks, wrong pins, hook commands outside the hook directory), and assert that nothing was written. `mdm/tests/test-lockdown-windows.ps1` does the same on Windows and also writes into a temporary folder to check the UTF-8-without-BOM output. Run locally; a CI job is added separately.
-- **Root and administrator tests (opt-in, disposable hosts only):** `KIRO_MDM_ROOT_TESTS=1` (Linux, macOS) or `KIRO_MDM_ADMIN_TESTS=1` (Windows). They deploy into a temporary prefix, never the real system paths, use an existing unprivileged account, and never create or delete accounts.
-- **Hook tests:** `bash agent-hooks/tests/run-tests.sh`. Run locally; a CI job is added separately.
+- **Dry-run tests (no root, no system changes, safe for CI):** `bash mdm/tests/test-lockdown.sh` and `bash mdm/tests/test-lockdown-macos.sh` validate the shipped policy JSON, `agent-hooks/SHA256SUMS`, the planned actions and the refusal of bad input (allow rules, malformed JSON, BOM, UTF-16, tampered hooks, wrong pins, hook commands outside the hook directory), and assert that nothing was written. `mdm/tests/test-lockdown-windows.ps1` does the same on Windows and also writes into a temporary folder to check the UTF-8-without-BOM output. CI (`validate-governance`) runs the Linux dry run; run the macOS and Windows tests on those platforms.
+- **Root and administrator tests (opt-in, disposable hosts only):** `KIRO_MDM_ROOT_TESTS=1` (Linux, macOS) or `KIRO_MDM_ADMIN_TESTS=1` (Windows). They deploy into a temporary prefix, never the real system paths, use an existing unprivileged account, and never create or delete accounts. The integration test in `security-tests/aws-integration/` runs them on disposable EC2 instances, together with a real lockdown of the system paths and tamper, drift and restore checks.
+- **Hook tests:** `bash agent-hooks/tests/run-tests.sh`. CI (`validate-governance`) runs them and verifies `agent-hooks/SHA256SUMS`.
 - **Adversarial harness:** `security-tests/chaos/` (see [`chaos-pentest-evidence.md`](chaos-pentest-evidence.md)). `--hooks-only` is safe anywhere; the full run needs a throwaway Linux VM and `CHAOS_ALLOW_SYSTEM_CHANGES=1`.
 
-Historical results: [`mdm-test-evidence.md`](mdm-test-evidence.md). They predate this version of the scripts; read the dated note at the top.
+Results for the current scripts (Linux as root and Windows as SYSTEM on disposable EC2 instances, 2026-10-10): [`aws-integration-test-evidence.md`](aws-integration-test-evidence.md). Historical results: [`mdm-test-evidence.md`](mdm-test-evidence.md). They predate this version of the scripts; read the dated note at the top.
 
 ## MAS TRM mapping
 

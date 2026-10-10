@@ -36,6 +36,13 @@ Optional per-OS MDM tests (also dry run by default, no root or admin):
 `bash mdm/tests/test-lockdown-macos.sh` and
 `powershell -ExecutionPolicy Bypass -File mdm\tests\test-lockdown-windows.ps1`.
 
+Changes to `cdk/`, `mdm/`, `agent-hooks/` or the egress allowlist can also be checked end to end with the
+integration test in a **sandbox AWS account**
+([`security-tests/aws-integration/`](security-tests/aws-integration/README.md)). It is optional, run
+manually and always torn down afterwards. When you re-run it, update
+[`kiro-docs/aws-integration-test-evidence.md`](kiro-docs/aws-integration-test-evidence.md) with sanitized
+results, never with account IDs, resource IDs, IPs or keys.
+
 If you change a hook script in `agent-hooks/`, regenerate `agent-hooks/SHA256SUMS` in the same
 change as described in [`agent-hooks/README.md`](agent-hooks/README.md) and confirm
 `(cd agent-hooks && shasum -a 256 -c SHA256SUMS)` passes (`sha256sum -c` on Linux; CI checks it).
@@ -97,6 +104,7 @@ change as described in [`agent-hooks/README.md`](agent-hooks/README.md) and conf
 3. No PDF, `.kiro/specs|hooks|settings` or secret files are staged (`git status`)
 4. No PII or customer data is present; all examples use placeholder data
 5. New or changed claims cite a primary source with a verified date
+6. `README.md`, `CHANGELOG.md` and every doc that describes the changed behaviour, command, count or status are updated in the same pull request. Examples: `AGENTS.md` commands, this file, the `SECURITY.md` CI description, component READMEs, the `kiro-docs/README.md` index. Search for the old wording before opening the pull request.
 
 ## License
 

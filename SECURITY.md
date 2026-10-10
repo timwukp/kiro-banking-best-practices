@@ -93,13 +93,31 @@ Runs on every pull request to `main`, on pushes to `main` and on manual dispatch
 - **validate-docs**: required files, no PDFs, no `.kiro` private config, an inline secret scan
   (AWS key IDs in `*.md`, `*.ts`, `*.json`, `*.sh`, `*.tsv`; PEM private-key headers in `*.md`,
   `*.ts`, `*.pem`, `*.key`, `*.tsv`, with the same exclusions), H1 headings, then `./validate-repo.sh`.
-- **validate-cdk**: `npm ci`, `npm audit --audit-level=high` (reported, not blocking), `tsc`,
-  ESLint, the Jest tests and `cdk synth` with cdk-nag `AwsSolutionsChecks`.
+- **validate-cdk**: `npm ci`, `npm audit --audit-level=high` (blocking: the job fails on any high
+  or critical advisory), `tsc`, ESLint, the Jest tests and `cdk synth` with cdk-nag
+  `AwsSolutionsChecks`.
 - **validate-skills**: Skill frontmatter and the PII pattern regression tests
   (`.kiro/skills/pii-detection/tests/patterns.test.sh`).
 - **validate-governance**: agent-hook regression tests, `agent-hooks/SHA256SUMS` verification,
   managed-settings JSON validity with deny/ask-only effects, hook/agent JSON validity, the MDM
   lockdown dry-run tests (non-root, no system changes) and `bash -n` on every shell script.
+
+### Integration test (manual, sandbox AWS account)
+
+CI has no AWS credentials and makes no system changes. The checks that need a real host or account are in
+[`security-tests/aws-integration/`](security-tests/aws-integration/README.md), run manually in a
+**sandbox account only**. It covers a real CDK deployment, the root and SYSTEM MDM lockdowns, the full
+chaos harness, the DNS Firewall egress mode and the Kiro CLI behind the allowlist.
+
+The test environment is isolated:
+- the runners are reachable only through Systems Manager (no inbound rules, no SSH keys);
+- IMDSv2 is required and volumes are encrypted;
+- an on-instance failsafe shuts the runners down, and they terminate on shutdown;
+- results go to a short-lived bucket;
+- everything is torn down afterwards and checked with a leftover scan.
+
+The sanitized results are in
+[`kiro-docs/aws-integration-test-evidence.md`](kiro-docs/aws-integration-test-evidence.md).
 
 ## Security Best Practices
 
