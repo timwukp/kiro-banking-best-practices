@@ -25,7 +25,7 @@ same commands. The shell tests need `bash` and `jq`; the PII pattern tests also 
 | Area | Command | Expected |
 |------|---------|----------|
 | Whole repo (read-only) | `./validate-repo.sh` | `RESULT: PASSED`, 0 errors; review warnings (broken links, PII-shaped values) |
-| CDK unit tests | `cd cdk && npm ci && npm test` | 86 tests pass |
+| CDK unit tests | `cd cdk && npm ci && npm test` | 91 tests pass |
 | CDK lint | `cd cdk && npm run lint` | no errors |
 | CDK synth + cdk-nag | `cd cdk && CDK_DEFAULT_ACCOUNT=000000000000 CDK_DEFAULT_REGION=ap-southeast-1 npx cdk synth --context env=dev` | synthesizes; cdk.json compiles with `tsc` first |
 | Agent hooks | `bash agent-hooks/tests/run-tests.sh` | `PASS=98 FAIL=0` |

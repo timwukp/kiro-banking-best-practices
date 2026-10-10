@@ -13,6 +13,7 @@ import {
   KIRO_SOCIAL_SIGNIN_HOSTS,
   kiroEgressDomains,
   kiroInterfaceEndpointServices,
+  parseAllowedDomainsContext,
 } from '../config/kiro-endpoints';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as fs from 'fs';
@@ -813,6 +814,15 @@ describe('ComplianceStack', () => {
     template.hasOutput('ComplianceRuleCount', { Value: '19' });
   });
 
+  test('PDPA RDS rules are explicitly scoped to RDS DB instances', () => {
+    for (const name of ['pdpa-rds-encryption-dev', 'pdpa-rds-no-public-dev']) {
+      template.hasResourceProperties('AWS::Config::ConfigRule', {
+        ConfigRuleName: name,
+        Scope: { ComplianceResourceTypes: ['AWS::RDS::DBInstance'] },
+      });
+    }
+  });
+
   test('createConfigRecorder defaults to false: no recorder, no delivery channel, rules have no recorder dependency', () => {
     template.resourceCountIs('AWS::Config::ConfigurationRecorder', 0);
     template.resourceCountIs('AWS::Config::DeliveryChannel', 0);
@@ -1095,5 +1105,36 @@ describe('CDK Nag Compliance', () => {
       const warnings = Annotations.fromStack(stack).findWarning('*', Match.stringLikeRegexp('AwsSolutions-.*'));
       expect(warnings).toHaveLength(0);
     }
+  });
+});
+
+describe('parseAllowedDomainsContext (-c egressAllowedDomains)', () => {
+  test('returns an empty list when unset or blank', () => {
+    expect(parseAllowedDomainsContext(undefined)).toEqual([]);
+    expect(parseAllowedDomainsContext('')).toEqual([]);
+    expect(parseAllowedDomainsContext(' , ')).toEqual([]);
+  });
+
+  test('parses, trims, lower-cases and de-duplicates hostnames and wildcards', () => {
+    expect(parseAllowedDomainsContext(' SSM.ap-southeast-1.amazonaws.com,ssm.ap-southeast-1.amazonaws.com , *.example.com'))
+      .toEqual(['ssm.ap-southeast-1.amazonaws.com', '*.example.com']);
+  });
+
+  test('rejects a bare wildcard, URLs and non-string values', () => {
+    expect(() => parseAllowedDomainsContext('*')).toThrow(/Invalid domain/);
+    expect(() => parseAllowedDomainsContext('https://example.com')).toThrow(/Invalid domain/);
+    expect(() => parseAllowedDomainsContext(42)).toThrow(/comma-separated/);
+  });
+
+  test('extra domains reach the DNS Firewall domain list', () => {
+    const app = new cdk.App();
+    const config: KiroBankingConfig = {
+      ...devConfig,
+      egress: { mode: 'nat-dns-firewall', allowedDomains: parseAllowedDomainsContext('ssm.ap-southeast-1.amazonaws.com') },
+    };
+    const stack = new NetworkStack(app, 'ExtraDomainsTest', { env: { account: '123456789012', region: 'ap-southeast-1' }, config });
+    const lists = Template.fromStack(stack).findResources('AWS::Route53Resolver::FirewallDomainList');
+    const domains = Object.values(lists).flatMap((r) => (r as { Properties: { Domains?: string[] } }).Properties.Domains ?? []);
+    expect(domains).toContain('ssm.ap-southeast-1.amazonaws.com');
   });
 });

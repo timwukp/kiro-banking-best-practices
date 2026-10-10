@@ -142,9 +142,9 @@ if [ "$HOOKS_ONLY" = 0 ]; then
   else
     echo "  (C3b skipped: the tmpfs home does not support chattr +a on this kernel; round 1 tests A4 on /var/tmp)"
   fi
-  O="$(dev 'cp /usr/bin/git $HOME/mygit && chmod +x $HOME/mygit && $HOME/mygit --version')"
+  devo 'cp /usr/bin/git $HOME/mygit && chmod +x $HOME/mygit && $HOME/mygit --version'; O="$OUT"
   judge C2 human "run an own copy of git from a noexec home (harness OS hardening)" BLOCKED "$(echo "$O" | grep -qiE 'permission denied|cannot execute|not permitted' && echo 1 || echo 0)" "$(echo "$O" | head -1)"
-  O="$(dev '/usr/bin/git --version')"
+  devo '/usr/bin/git --version'; O="$OUT"
   judge C1 human "approved system binary still runs (force-push must be stopped server-side)" GAP "$(echo "$O" | grep -qi 'git version' && echo 0 || echo 1)" "$(echo "$O" | head -1)"
   dev "cat '$CANARY'" >/dev/null; judge E3 human "read a root-only 0600 sensitive file (harness OS hardening)" BLOCKED "$([ "$RC" -ne 0 ] && echo 1 || echo 0)" "rc=$RC"
 fi

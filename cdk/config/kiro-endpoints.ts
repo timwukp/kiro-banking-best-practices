@@ -221,3 +221,26 @@ export function isExactHostname(host: string): boolean {
 export function uniqueLowerCase(domains: readonly string[]): string[] {
   return [...new Set(domains.map((d) => d.toLowerCase()))];
 }
+
+/**
+ * Parses the `-c egressAllowedDomains=` context value: a comma-separated list of
+ * extra DNS Firewall domains (exact hostnames or `*.`-prefixed wildcards) to
+ * allow in `egress.mode = 'nat-dns-firewall'`, for example the SSM and S3
+ * hostnames an operations or test instance needs. Blank entries are ignored;
+ * a bare `*` or any invalid entry throws.
+ */
+export function parseAllowedDomainsContext(value: unknown): string[] {
+  if (value === undefined || value === null || value === '') {
+    return [];
+  }
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid -c egressAllowedDomains=${String(value)} (expected a comma-separated list of domains)`);
+  }
+  const domains = value.split(',').map((d) => d.trim()).filter((d) => d.length > 0);
+  for (const d of domains) {
+    if (d === '*' || !isValidDnsFirewallDomain(d)) {
+      throw new Error(`Invalid domain '${d}' in -c egressAllowedDomains (expected e.g. ssm.ap-southeast-1.amazonaws.com or *.example.com)`);
+    }
+  }
+  return uniqueLowerCase(domains);
+}

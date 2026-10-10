@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.1] - 2026-10-10
+
+Integration test in a sandbox AWS account and the fixes it found. Sanitized results: [`kiro-docs/aws-integration-test-evidence.md`](kiro-docs/aws-integration-test-evidence.md).
+
+### Added
+- **`security-tests/aws-integration/`:** an isolated, reproducible integration test. A CloudFormation harness provides disposable Linux (AL2023) and Windows Server 2022 runners: SSM only, no inbound rules or SSH keys, IMDSv2, encrypted volumes, terminate-on-shutdown with a failsafe timer, and a short-lived results bucket. An orchestrator stages a bundle, runs the suites, deploys and verifies the CDK app, tests the `nat-dns-firewall` egress mode with a probe in the WorkSpaces subnet, tears everything down and scans for leftovers.
+- **Results (final code):** L1 CI parity on Linux 17/17; L2 root MDM lockdown 16/16; L3 chaos rounds 1 and 2 with 0 BYPASSED; W1 Windows MDM 14/14 under PowerShell 5.1 and 7; C1 real deployment of all 5 stacks 36/36, including alarm delivery to the encrypted SNS topic for all 7 alarms; C2 DNS Firewall allowlist 13/13; K1 Kiro CLI 2.29.0 installed and locked down behind the allowlist 3/3. The Kiro end-to-end prompts (K2) were skipped because no Kiro API key was provided.
+- **`-c egressAllowedDomains=a,b`:** extra DNS Firewall allowlist entries for one run (exact hostnames or `*.`-wildcards; a bare `*` is rejected), merged into `egress.allowedDomains`.
+
+### Fixed
+- **Dependencies:** the lockfile had 1 critical and 36 high `npm audit` advisories. Upgraded to aws-cdk-lib 2.273, cdk-nag 2.38, CDK CLI 2.1145, Jest 30, TypeScript 5.9, ESLint 9 (flat config `eslint.config.mjs` replaces `.eslintrc.json`) and typescript-eslint 8, giving 0 critical and 0 high. The CI audit step is now blocking (`continue-on-error` removed).
+- **Lockfile:** regenerated with npm 10, the npm bundled with Node.js 22 that CI uses; an npm 11 lockfile failed `npm ci` there.
+- **CDK deprecations:** `addStackDependency` / `addResourceDependency`. The cross-stack reference strength is pinned to `strong` in `cdk.json`, so the existing CloudFormation exports are unchanged.
+- **AWS Config:** the PDPA RDS rules are explicitly scoped to `AWS::RDS::DBInstance`.
+- **Chaos harness:** evidence records for steps run through `$(dev …)` showed the previous step's command, because `dev()` ran in a subshell. The new `devo()` helper keeps the command and exit code; verdicts were not affected.
+
+### Changed
+- `mdm-test-evidence.md` and `chaos-pentest-evidence.md` link to the new results for the current scripts and harness.
+- `AGENTS.md`, `CONTRIBUTING.md` and `cdk/README.md`: 91 tests, the npm 10 lockfile rule, the integration test, and `-c egressAllowedDomains=`.
+
+---
+
 ## [1.9] - 2026-10-09
 
 Correction release. A review of 1.0–1.8 found inaccurate regulatory citations, data-location and network claims that do not match the official Kiro documentation, Kiro settings and commands that do not exist, hooks that failed open, and CDK defects. This release fixes them and records two changes that were merged after 1.8.

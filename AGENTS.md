@@ -20,6 +20,7 @@ MAS-aligned best practices for deploying **AWS Kiro** in Singapore **financial s
 | MCP, SDLC, PDPA, FEAT (Sections 5–14) | `Kiro-Banking-Best-Practices-Part2.md` |
 | Build a MAS-aligned Kiro Skill | `Banking-Skills-Development-Guide.md` |
 | Red-team / validate the controls (chaos test) | `security-tests/chaos/run-chaos.sh`, `kiro-docs/chaos-pentest-evidence.md` |
+| Integration test in a sandbox AWS account (EC2 runners, real CDK deploy, teardown) | `security-tests/aws-integration/README.md`, `kiro-docs/aws-integration-test-evidence.md` |
 | Deploy infrastructure | `cdk/` (see `cdk/README.md`) |
 | MAS TRM mapping | `README.md` → "Compliance Framework" |
 
@@ -36,7 +37,7 @@ MAS-aligned best practices for deploying **AWS Kiro** in Singapore **financial s
 | Check | Command | Expect |
 |-------|---------|--------|
 | Repo validator (read-only: required files, secrets/PII, links) | `./validate-repo.sh` | `RESULT: PASSED` (0 errors) |
-| CDK tests / lint / synth | `cd cdk && npm test`; `npm run lint`; `npx cdk synth --context env=dev` | 86 tests pass; lint clean; synth OK (cdk.json builds with `tsc`) |
+| CDK tests / lint / synth | `cd cdk && npm test`; `npm run lint`; `npx cdk synth --context env=dev` | 91 tests pass; lint clean; synth OK (cdk.json builds with `tsc`) |
 | Agent hooks (bash + jq) | `bash agent-hooks/tests/run-tests.sh` | `PASS=98 FAIL=0` |
 | PII skill patterns (grep -E; perl for PCRE) | `bash .kiro/skills/pii-detection/tests/patterns.test.sh` | `PASS=346 FAIL=0` |
 | MDM dry run (non-root, no system changes) | `bash mdm/tests/test-lockdown.sh` | `FAIL=0` |
@@ -50,6 +51,7 @@ MAS-aligned best practices for deploying **AWS Kiro** in Singapore **financial s
 - **Regions:** workload region `ap-southeast-1`; Kiro profile region `us-east-1` or `eu-central-1` (`cdk/config/kiro-endpoints.ts`).
 - **AWS Config rules:** when you add or remove a rule in `compliance-stack.ts`, update the `ComplianceRuleCount` CfnOutput and the count in `test/stacks.test.ts` in the same change.
 - **Run `cd cdk && npm test`** (and `npm run lint`) after every CDK change.
+- **Lockfile:** regenerate `cdk/package-lock.json` with npm 10 (the npm bundled with Node.js 22, which CI uses), e.g. `npx -y npm@10 install --package-lock-only`; an npm 11 lockfile can fail `npm ci` in CI.
 - **Never rename** physical resource names, stack IDs, construct IDs of deployed resources or CfnOutput export names: renames replace or orphan retained resources and break cross-stack references.
 - Map infrastructure to the MAS TRM sections it supports, and keep those cross-references in the docs.
 
